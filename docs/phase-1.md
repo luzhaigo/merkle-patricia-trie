@@ -114,10 +114,10 @@ Work through these in order. Each builds on the last.
 
 ### Task 1.4: Unit tests
 
-**What to do:**
-- Create `main_test.go` in the same package
+**What to do (mandatory — phase is not complete without tests):**
+- Create a `_test.go` file in the same package as the code you're testing
 - Write **table-driven tests** for `inferName` — pass different directory paths and check the output
-- Optionally, if you structured your dispatch as a `func run(args []string) error`, you can test that too
+- Test `runCommandWithName` for both success and error cases
 
 **Go testing basics:**
 - Test files end in `_test.go` and live in the same directory

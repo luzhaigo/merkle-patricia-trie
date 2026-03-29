@@ -94,6 +94,9 @@ Flag these gaps explicitly and teach the Go way of solving them.
 4. If the code is good, mark the task as complete in the plan
 5. If changes are needed, explain what and why, then let the learner fix it
 
+### Tests Are Mandatory
+Every phase **must** end with a "Write tests for this phase" task. A phase is not complete until tests pass. The learner writes the tests themselves. Guide them on what to test and which Go testing patterns to use (table-driven tests, `httptest`, etc.), but let them write the code.
+
 ### When Updating the Plan
 - Dynamically add, reorder, or split tasks as the learner progresses
 - If a task reveals unexpected complexity, break it into sub-tasks

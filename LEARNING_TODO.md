@@ -10,10 +10,10 @@ Reference: `packages/portless/` in the upstream monorepo.
 
 Set up argument parsing, subcommand dispatch, and help/version output.
 
-- [ ] Parse `os.Args` and dispatch to subcommands: `run`, `list`, `help`, `version`
-- [ ] Support named mode: `portless-go <name> <cmd> [args...]`
-- [ ] Support run mode with `--name` flag and directory-based name inference
-- [ ] Add unit tests for argument parsing and `inferName`
+- [x] Parse `os.Args` and dispatch to subcommands: `run`, `list`, `help`, `version`
+- [x] Support named mode: `portless-go <name> <cmd> [args...]`
+- [x] Support run mode with `--name` flag and directory-based name inference
+- [x] Write tests for this phase
 
 **Upstream reference:** `packages/portless/src/cli.ts`
 
@@ -25,8 +25,8 @@ Learn `net/http` and `httputil.ReverseProxy` by building a simple forwarding pro
 
 - [ ] Create an HTTP server that listens on a configurable port (default 1355)
 - [ ] Forward all requests to a hardcoded backend using `httputil.ReverseProxy`
-- [ ] Add tests that start the proxy, hit it with `net/http/httptest`, and verify forwarding
 - [ ] Extract proxy logic into a `proxy/` package
+- [ ] Write tests for this phase
 
 **Upstream reference:** `packages/portless/src/proxy.ts`
 
@@ -39,7 +39,7 @@ Route requests to different backends based on the `Host` header.
 - [ ] Build a route table (`sync.Map` or mutex-guarded map) mapping hostnames to backend URLs
 - [ ] Parse the `Host` header and look up the target backend
 - [ ] Return 404 with a helpful message for unknown hosts
-- [ ] Add tests for route matching (exact match, missing host, `.localhost` suffix handling)
+- [ ] Write tests for this phase
 
 **Upstream reference:** `packages/portless/src/proxy.ts` (routing logic)
 
@@ -51,7 +51,7 @@ Provide a way to add and remove routes at runtime.
 
 - [ ] Add an internal HTTP API (e.g. `POST /routes`, `DELETE /routes/:name`) on a separate port
 - [ ] Implement `AddRoute` / `RemoveRoute` methods on the route table
-- [ ] Test concurrent route registration with multiple goroutines
+- [ ] Write tests for this phase
 
 **Upstream reference:** `packages/portless/src/routes.ts`
 
@@ -64,7 +64,8 @@ Start a child command and wire it into the proxy.
 - [ ] Use `os/exec` to spawn a child process with a `PORT` env var set to a random free port
 - [ ] Forward the child's stdout/stderr to the parent's terminal
 - [ ] Handle child process exit and propagate signals (SIGINT, SIGTERM)
-- [ ] Write a helper to find a free port in a configurable range (default 4000–4999)
+- [ ] Write a helper to find a free port in a range (default 4000–4999)
+- [ ] Write tests for this phase
 
 **Upstream reference:** `packages/portless/src/process.ts`
 
@@ -78,6 +79,7 @@ Connect the CLI, proxy, route table, and process spawner into a working tool.
 - [ ] `portless-go run <cmd>`: same flow but infer name from directory
 - [ ] On child exit, deregister the route and shut down cleanly
 - [ ] Manual end-to-end test: run a simple HTTP server through portless-go, curl `<name>.localhost:1355`
+- [ ] Write tests for this phase
 
 **Upstream reference:** `packages/portless/src/cli.ts` (orchestration)
 
@@ -90,7 +92,8 @@ Finish the MVP with observability and cleanup.
 - [ ] Implement `portless-go list` to display active routes (name, backend port, status)
 - [ ] Add graceful shutdown on SIGINT/SIGTERM (stop proxy, kill children, clean up routes)
 - [ ] Write a short usage guide in `README.md` with examples
-- [ ] Review all code for idiomatic Go: naming, error handling, test coverage
+- [ ] Review all code for idiomatic Go: naming, error handling
+- [ ] Write tests for this phase
 
 ---
 
@@ -98,7 +101,7 @@ Finish the MVP with observability and cleanup.
 
 | Phase | Topic                        | Status         |
 | ----- | ---------------------------- | -------------- |
-| 1     | Basic CLI skeleton           | 🔶 In Progress |
+| 1     | Basic CLI skeleton           | ✅ Complete     |
 | 2     | HTTP server & reverse proxy  | ⬜ Not Started  |
 | 3     | Host-based routing           | ⬜ Not Started  |
 | 4     | Route registration           | ⬜ Not Started  |
