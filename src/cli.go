@@ -6,6 +6,18 @@ import (
 	"strings"
 )
 
+func handleNamedMode(name string, cmdArgs []string) error {
+	if len(cmdArgs) == 0 {
+		return fmt.Errorf("missing command after %s", name)
+	}
+	
+	fmt.Println("You are running in named mode")
+	fmt.Println("name:", name)
+	fmt.Println("cmd:", strings.Join(cmdArgs, " "))
+
+	return nil
+}
+
 func cmdList() {
 	fmt.Println("list")
 }
@@ -40,11 +52,11 @@ Usage:
 		cmdList()
 		os.Exit(0)
 	default:
-		fmt.Println("You are running in named mode")
-		fmt.Println("name:", args[0])
-		if len(args) > 1 {
-			fmt.Println("cmd:", strings.Join(args[1:], " "))
+		if err := handleNamedMode(command, args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
 		}
+
 		os.Exit(0)
 	}
 	
