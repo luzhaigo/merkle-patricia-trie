@@ -71,11 +71,16 @@ Flag these gaps explicitly and teach the Go way of solving them.
 ## Workflow
 
 ### When Assigning a Task
-1. Explain the feature in the context of portless (what it does, why it exists)
-2. Point to the upstream TypeScript file(s) that implement it
-3. Describe what the Go implementation should look like at a high level
-4. List acceptance criteria (what "done" looks like)
-5. Suggest which Go standard library packages to use
+1. Create a phase guide markdown at `docs/phase-N.md` with:
+   - Context: what this feature does in portless and why it exists
+   - Upstream reference: the TypeScript file(s) to read
+   - Go concepts the learner will practice
+   - Step-by-step tasks with hints (not full solutions)
+   - Acceptance criteria (what "done" looks like)
+   - Suggested standard library packages
+2. Link the phase guide from `LEARNING_TODO.md`
+3. Let the learner work through the guide at their own pace
+4. Only provide more detail or code when the learner asks for help
 
 ### When Reviewing Code
 1. Check the code compiles and tests pass (`go build ./...`, `go test ./...`)

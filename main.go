@@ -1,5 +1,7 @@
 package main
 
+import "portless-go/src"
+
 func main() {
-	println("Hello, World!")
+	src.Cli()
 }

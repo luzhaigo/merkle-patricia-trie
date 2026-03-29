@@ -6,13 +6,13 @@ Reference: `packages/portless/` in the upstream monorepo.
 
 ---
 
-## Phase 1: Basic CLI skeleton
+## Phase 1: Basic CLI skeleton — [Guide](docs/phase-1.md)
 
 Set up argument parsing, subcommand dispatch, and help/version output.
 
-- [x] Parse `os.Args` and dispatch to subcommands: `run`, `list`, `help`, `version`
-- [x] Support named mode: `portless-go <name> <cmd> [args...]`
-- [x] Support run mode with `--name` flag and directory-based name inference
+- [ ] Parse `os.Args` and dispatch to subcommands: `run`, `list`, `help`, `version`
+- [ ] Support named mode: `portless-go <name> <cmd> [args...]`
+- [ ] Support run mode with `--name` flag and directory-based name inference
 - [ ] Add unit tests for argument parsing and `inferName`
 
 **Upstream reference:** `packages/portless/src/cli.ts`
