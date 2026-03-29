@@ -19,7 +19,7 @@ Set up argument parsing, subcommand dispatch, and help/version output.
 
 ---
 
-## Phase 2: HTTP server and reverse proxy basics
+## Phase 2: HTTP server and reverse proxy basics — [Guide](docs/phase-2.md)
 
 Learn `net/http` and `httputil.ReverseProxy` by building a simple forwarding proxy.
 
