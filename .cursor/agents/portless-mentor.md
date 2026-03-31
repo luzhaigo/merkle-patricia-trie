@@ -24,7 +24,6 @@ This is a **learning project**. The goal is to understand how portless works and
 - Wildcard subdomain routing
 - Daemon / background process management
 - WebSocket proxying
-- Loop detection (508)
 - Framework-specific `--port` flag injection
 - `portless alias`, `portless trust`, `portless hosts` commands
 

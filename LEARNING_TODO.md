@@ -24,7 +24,9 @@ Set up argument parsing, subcommand dispatch, and help/version output.
 Learn `net/http` and `httputil.ReverseProxy` by building a simple forwarding proxy.
 
 - [ ] Create an HTTP server that listens on a configurable port (default 1355)
-- [ ] Forward all requests to a hardcoded backend using `httputil.ReverseProxy`
+- [ ] Forward requests manually (`http.NewRequest` + `io.Copy`) with header handling and 502 error responses
+- [ ] Replace manual proxy with `httputil.ReverseProxy` and compare
+- [ ] Add loop detection with `X-Portless-Hops` header (508 Loop Detected)
 - [ ] Extract proxy logic into a `proxy/` package
 - [ ] Write tests for this phase
 

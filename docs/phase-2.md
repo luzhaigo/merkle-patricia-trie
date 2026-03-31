@@ -1,5 +1,28 @@
 # Phase 2: HTTP Server and Reverse Proxy Basics
 
+## What is a reverse proxy?
+
+A **reverse proxy** sits between clients (browsers) and backend servers. The client talks to the proxy, the proxy talks to the backend, and the client never connects to the backend directly.
+
+```
+Without proxy:    Browser ──→ localhost:3000 (your app)
+With proxy:       Browser ──→ localhost:1355 (proxy) ──→ localhost:3000 (your app)
+```
+
+**Why does portless need one?**
+
+The whole point of portless is to give your app a name like `myapp.localhost` instead of a port number. The proxy is what makes this work — it listens on a single known port (1355), reads the `Host` header to figure out which app you want, and forwards the request to the right backend. Without the reverse proxy, there's no portless.
+
+**What a reverse proxy does (at minimum):**
+
+1. **Accepts incoming connections** on a known port
+2. **Forwards the request** (method, path, headers, body) to the backend
+3. **Returns the response** (status code, headers, body) to the client
+4. **Modifies headers** — adds `X-Forwarded-For` so the backend knows the real client IP, strips hop-by-hop headers that shouldn't be forwarded
+5. **Handles errors** — if the backend is down, returns a 502 Bad Gateway instead of crashing
+
+This phase covers all five. Hostname-based routing (deciding *which* backend to forward to) comes in Phase 3.
+
 ## Goal
 
 Build an HTTP server that listens on port 1355 and forwards all incoming requests to a backend. When this phase is done, you'll have a working reverse proxy — requests come in on one port and get forwarded to another. No routing by hostname yet (that's Phase 3).
@@ -12,25 +35,42 @@ Key things to notice:
 
 1. **The proxy listens on port 1355** (defined in [`cli-utils.ts`](https://github.com/vercel-labs/portless/blob/main/packages/portless/src/cli-utils.ts) as `DEFAULT_PROXY_PORT = 1355`). Configurable via `PORTLESS_PORT` env var or `--port` flag.
 
-2. **Forwarding is manual** — portless does NOT use a third-party proxy library. It creates an `http.request(...)` to `127.0.0.1:<backendPort>` and pipes the request/response bodies:
+2. **Headers are modified before forwarding** — portless does NOT blindly forward all incoming headers. Before creating the outgoing request, it calls `buildForwardedHeaders(req, route, isTls)` which:
+   - **Adds** `X-Forwarded-For` (client IP), `X-Forwarded-Proto` (http/https), `X-Forwarded-Host`, `X-Forwarded-Port`
+   - **Increments** `X-Portless-Hops` (for loop detection — you'll implement this in Task 2.2c)
+   - **Strips** HTTP/2 pseudo-headers (keys starting with `:` like `:method`, `:path`)
+   - **Does NOT forward** the raw incoming headers as-is
+
+3. **Forwarding is manual** — portless does NOT use a third-party proxy library. The full flow is:
 
 ```javascript
+// Step 1: Build modified headers (NOT the raw incoming headers)
+const proxyReqHeaders = buildForwardedHeaders(req, route, isTls);
+
+// Step 2: Create outgoing request with modified headers
 const proxyReq = http.request({
   hostname: "127.0.0.1",
   port: route.port,
   path: req.url,
   method: req.method,
-  headers: proxyReqHeaders,
+  headers: proxyReqHeaders,   // ← modified headers
 }, (proxyRes) => {
-  res.writeHead(proxyRes.statusCode, responseHeaders);
-  proxyRes.pipe(res);
+  // Step 3: Send response back — also filters headers for HTTP/2
+  res.writeHead(proxyRes.statusCode, filteredResponseHeaders);
+  proxyRes.pipe(res);          // stream response body
 });
+
+// Step 4: Stream request body (separate from headers)
 req.pipe(proxyReq);
 ```
 
-3. **The server is created with** `http.createServer(handleRequest)` — a single handler function processes every request.
+   Headers and body are **separate concerns** in HTTP. Headers are sent as config when the request is created (step 2). `pipe` only streams the body bytes (step 4).
 
-The Go equivalent is much simpler thanks to `httputil.ReverseProxy`, which handles the request forwarding, header copying, and body streaming for you.
+   On the response side, portless also strips **hop-by-hop headers** (`Connection`, `Keep-Alive`, `Transfer-Encoding`, etc.) for HTTP/2 clients before piping the response body.
+
+4. **The server is created with** `http.createServer(handleRequest)` — a single handler function processes every request.
+
+The Go equivalent is simpler thanks to `httputil.ReverseProxy`, which handles forwarding, header copying, and body streaming. It also automatically adds `X-Forwarded-For` for you.
 
 ## What you'll build
 
@@ -85,32 +125,57 @@ Build a reverse proxy **by hand** first, the same way upstream portless does it.
 **What to do:**
 - Write an `http.Handler` that, for each incoming request:
   1. Creates a new `http.Request` to the backend using `http.NewRequest`
-  2. Copies the method, path, and headers from the incoming request
-  3. Passes `r.Body` as the body (this is the `io.Reader` — equivalent to Node's `req.pipe(proxyReq)`)
-  4. Sends it with `http.DefaultClient.Do(proxyReq)` (or create your own `http.Client`)
-  5. Copies the response status code, headers, and body back to the client using `io.Copy`
+  2. Copies the method, path, and body (`r.Body`) from the incoming request
+  3. Copies headers from the incoming request, but **not blindly** — handle them properly (see below)
+  4. Adds an `X-Forwarded-For` header with the client's IP address
+  5. Sends it with `http.DefaultClient.Do(proxyReq)` (or create your own `http.Client`)
+  6. Copies the response status code, headers, and body back to the client using `io.Copy`
 - Hardcode the backend URL for now (e.g. `http://localhost:8080`)
+
+**Header handling — what a real proxy does:**
+
+A proxy shouldn't just blindly copy all headers. Here's what to think about:
+
+- **Copy most headers** — `Content-Type`, `Accept`, `Authorization`, cookies, etc. should be forwarded
+- **Add `X-Forwarded-For`** — append the client's IP so the backend knows who the real client is. Get it from `r.RemoteAddr` (strip the port with `net.SplitHostPort`)
+- **Skip hop-by-hop headers** — headers like `Connection`, `Keep-Alive`, `Transfer-Encoding`, `Upgrade` are meant for the connection between client and proxy, not between proxy and backend. These shouldn't be forwarded (though for a learning project, skipping just `Connection` is fine)
+- On the **response** side, same idea — copy most headers, but skip hop-by-hop ones
+
+This mirrors what upstream portless does in `buildForwardedHeaders()`.
 
 **How this maps to upstream portless:**
 
 | Node.js (portless) | Go (manual) |
 |---------------------|-------------|
-| `http.request({hostname, port, path, method, headers}, cb)` | `http.NewRequest(method, targetURL+path, body)` |
-| `req.pipe(proxyReq)` — streams request body to backend | Pass `r.Body` (an `io.Reader`) as the 3rd arg to `http.NewRequest` |
-| `proxyRes.pipe(res)` — streams response body to client | `io.Copy(w, resp.Body)` |
-| `res.writeHead(statusCode, headers)` | `w.WriteHeader(statusCode)` after copying headers |
+| `buildForwardedHeaders(req, route, isTls)` | Loop over `r.Header`, copy to `proxyReq.Header`, add `X-Forwarded-For` |
+| `http.request({..., headers: proxyReqHeaders}, cb)` | `http.NewRequest(method, targetURL+path, body)` + set headers |
+| `req.pipe(proxyReq)` — streams request body | Pass `r.Body` (an `io.Reader`) as the 3rd arg to `http.NewRequest` |
+| `proxyRes.pipe(res)` — streams response body | `io.Copy(w, resp.Body)` |
+| `res.writeHead(statusCode, filteredHeaders)` | Copy response headers + `w.WriteHeader(statusCode)` |
 
 **Hints:**
 - `http.NewRequest(r.Method, targetURL+r.URL.RequestURI(), r.Body)` creates the outgoing request
-- Loop over `resp.Header` and copy each header to `w.Header()` before calling `w.WriteHeader()`
+- To copy headers: loop over `r.Header` with `for key, values := range r.Header { ... }` and set them on `proxyReq.Header`
+- To skip hop-by-hop: check if the header key is in a set like `{"Connection": true, "Keep-Alive": true}`
+- `r.RemoteAddr` looks like `"127.0.0.1:54321"` — use `net.SplitHostPort` to get just the IP
+- Copy response headers before calling `w.WriteHeader()` — once you write the status, headers are sent
 - `io.Copy(w, resp.Body)` streams the response body — don't forget `defer resp.Body.Close()`
 - This is more code than the `ReverseProxy` approach, but you'll understand exactly what a proxy does
+
+**Error handling:**
+
+What should your proxy do when the backend is unreachable? Upstream portless returns **502 Bad Gateway** with a message like "Could not connect to backend". Your manual proxy should do the same:
+- If `client.Do(proxyReq)` returns an error, respond with `http.StatusBadGateway` (502)
+- Write a simple error message to the response body so the user knows what went wrong
 
 **Acceptance criteria:**
 - Start a backend (e.g. `python3 -m http.server 8080`)
 - Start your proxy on 1355, `curl http://localhost:1355` → returns the backend's response
 - `curl http://localhost:1355/some/path` → path is forwarded correctly
 - `curl -X POST -d "hello" http://localhost:1355/echo` → body is forwarded (if your backend supports it)
+- `curl -v http://localhost:1355` → response does NOT contain a `Connection` hop-by-hop header from the backend
+- The backend receives an `X-Forwarded-For` header with the client IP
+- **Stop the backend**, `curl http://localhost:1355` → returns 502 with an error message (not a panic)
 
 ---
 
@@ -128,16 +193,61 @@ Now replace your manual proxy with Go's built-in `httputil.ReverseProxy`. Compar
 - It implements `http.Handler` — so you can pass it directly to your server
 - For every incoming request, it rewrites the URL to point at the target and forwards the request
 - It copies the response (status, headers, body) back to the original client
-- Under the hood, it does everything you did manually in 2.2a: creates a request, copies headers, streams body with `io.Copy`, writes the response back
+- Under the hood, it does everything you did manually in 2.2a:
+  - Creates an outgoing request with copied headers
+  - Streams the request body
+  - **Automatically adds `X-Forwarded-For`** with the client IP
+  - **Automatically strips hop-by-hop headers** from the response
+  - Streams the response body back
+- It has a `Director` function you can customize to modify outgoing request headers (useful later in Phase 3 for host-based routing)
 
 **Hints:**
 - `url.Parse("http://localhost:8080")` creates the target URL
 - `httputil.NewSingleHostReverseProxy(target)` returns an `*httputil.ReverseProxy` which is an `http.Handler`
-- Compare the line count with your manual implementation — this is why Go's stdlib is powerful
+- Compare the line count with your manual implementation — all that header handling you wrote is built in
+- To verify: `curl -v` your proxy and compare the headers with what your manual version produced
 
 **Acceptance criteria:**
 - Same as 2.2a: forwarding works, paths preserved, response returned correctly
 - Your manual implementation from 2.2a can be kept as a comment or separate file for reference
+
+---
+
+### Task 2.2c: Loop detection with `X-Portless-Hops`
+
+**The problem:** When a frontend dev server (e.g. Vite) proxies API requests to another portless app, it can accidentally create an infinite loop if it doesn't rewrite the `Host` header. The request goes: browser → proxy → frontend → proxy → frontend → proxy → ... forever.
+
+Upstream portless solves this with a hop counter header. Each time the proxy forwards a request, it increments `X-Portless-Hops`. If it exceeds a maximum (5 in upstream), the proxy responds with **508 Loop Detected** instead of forwarding.
+
+**What to do:**
+- Before forwarding a request, read the `X-Portless-Hops` header (it's a number as a string, default 0 if missing)
+- If the value is >= your max (use 5, matching upstream), respond with **508 Loop Detected** and a message explaining the loop
+- Otherwise, increment the value by 1 and set it on the outgoing request
+- This works with either your manual proxy (2.2a) or `ReverseProxy` (2.2b)
+
+**How upstream does it** (in `proxy.ts`):
+
+```javascript
+const hops = parseInt(req.headers["x-portless-hops"] || "0", 10);
+if (hops >= MAX_PROXY_HOPS) {  // MAX_PROXY_HOPS = 5
+  res.writeHead(508);
+  res.end("Loop detected...");
+  return;
+}
+proxyReqHeaders["x-portless-hops"] = String(hops + 1);
+```
+
+**Hints:**
+- `r.Header.Get("X-Portless-Hops")` returns the header value as a string (empty if not present)
+- `strconv.Atoi(value)` converts a string to int — handle the error by defaulting to 0
+- For `ReverseProxy`, you can add this check either in middleware (a handler that wraps the proxy) or in the `Director` function
+- HTTP status 508 doesn't have a constant in Go's `net/http` — just use the integer `508`
+
+**Acceptance criteria:**
+- Normal requests work as before (hop count starts at 0, gets incremented)
+- `curl -H "X-Portless-Hops: 4" http://localhost:1355` → forwarded (hops = 4, under limit)
+- `curl -H "X-Portless-Hops: 5" http://localhost:1355` → 508 response with loop message
+- `curl -v http://localhost:1355` → response shows `X-Portless-Hops: 1` was sent to backend
 
 ---
 
@@ -201,7 +311,7 @@ func TestProxyForwards(t *testing.T) {
 
 **Acceptance criteria:**
 - `go test ./proxy/...` passes
-- At least 2 tests: basic forwarding works, and path is preserved
+- At least 4 tests: basic forwarding, path preserved, backend-down returns 502, and hop limit returns 508
 
 ---
 

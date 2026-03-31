@@ -6,7 +6,7 @@ This is a **learning project** (my first Go project). The goal is to understand 
 
 ## What It Does
 
-portless-go sits between your browser and your dev server. Instead of accessing `localhost:3000`, you use `myapp.localhost:1355`. When you run:
+portless-go is a **reverse proxy** — it sits between your browser and your dev server, forwarding requests from a named URL to the right backend. Instead of accessing `localhost:3000`, you use `myapp.localhost:1355`. When you run:
 
 ```bash
 portless-go myapp npm start
@@ -20,7 +20,8 @@ It will:
 ## In Scope
 
 - CLI with `<name> <cmd>`, `run`, and `list` subcommands
-- Reverse proxy with Host-based routing
+- Reverse proxy: request/response forwarding, header manipulation (`X-Forwarded-For`, hop-by-hop stripping), error handling (502)
+- Host-based routing: route requests to different backends by `Host` header
 - Child process spawning with `PORT` injection
 - In-memory route table
 
