@@ -46,9 +46,12 @@ Browser → localhost:1355 → proxy → localhost:BACKEND_PORT → your app
 ## Go concepts you'll practice
 
 - **`net/http`** — creating an HTTP server with `http.ListenAndServe` or `http.Server`
-- **`net/http/httputil.ReverseProxy`** — Go's built-in reverse proxy
-- **`net/url.Parse`** — parsing URLs for the proxy target
 - **`http.Handler` interface** — the core abstraction: anything with `ServeHTTP(w, r)` can handle requests
+- **`http.NewRequest`** — creating outgoing HTTP requests manually
+- **`http.Client.Do`** — sending requests and getting responses
+- **`io.Copy`** — streaming data between a reader and a writer (how body forwarding works)
+- **`net/http/httputil.ReverseProxy`** — Go's built-in reverse proxy (does all the above for you)
+- **`net/url.Parse`** — parsing URLs for the proxy target
 - **`net/http/httptest`** — spinning up test servers without binding real ports
 
 ## Tasks
@@ -75,30 +78,66 @@ Work through these in order.
 
 ---
 
-### Task 2.2: Forward requests to a backend
+### Task 2.2a: Forward requests — the manual way
+
+Build a reverse proxy **by hand** first, the same way upstream portless does it. This teaches you what's actually happening under the hood.
+
+**What to do:**
+- Write an `http.Handler` that, for each incoming request:
+  1. Creates a new `http.Request` to the backend using `http.NewRequest`
+  2. Copies the method, path, and headers from the incoming request
+  3. Passes `r.Body` as the body (this is the `io.Reader` — equivalent to Node's `req.pipe(proxyReq)`)
+  4. Sends it with `http.DefaultClient.Do(proxyReq)` (or create your own `http.Client`)
+  5. Copies the response status code, headers, and body back to the client using `io.Copy`
+- Hardcode the backend URL for now (e.g. `http://localhost:8080`)
+
+**How this maps to upstream portless:**
+
+| Node.js (portless) | Go (manual) |
+|---------------------|-------------|
+| `http.request({hostname, port, path, method, headers}, cb)` | `http.NewRequest(method, targetURL+path, body)` |
+| `req.pipe(proxyReq)` — streams request body to backend | Pass `r.Body` (an `io.Reader`) as the 3rd arg to `http.NewRequest` |
+| `proxyRes.pipe(res)` — streams response body to client | `io.Copy(w, resp.Body)` |
+| `res.writeHead(statusCode, headers)` | `w.WriteHeader(statusCode)` after copying headers |
+
+**Hints:**
+- `http.NewRequest(r.Method, targetURL+r.URL.RequestURI(), r.Body)` creates the outgoing request
+- Loop over `resp.Header` and copy each header to `w.Header()` before calling `w.WriteHeader()`
+- `io.Copy(w, resp.Body)` streams the response body — don't forget `defer resp.Body.Close()`
+- This is more code than the `ReverseProxy` approach, but you'll understand exactly what a proxy does
+
+**Acceptance criteria:**
+- Start a backend (e.g. `python3 -m http.server 8080`)
+- Start your proxy on 1355, `curl http://localhost:1355` → returns the backend's response
+- `curl http://localhost:1355/some/path` → path is forwarded correctly
+- `curl -X POST -d "hello" http://localhost:1355/echo` → body is forwarded (if your backend supports it)
+
+---
+
+### Task 2.2b: Forward requests — using `httputil.ReverseProxy`
+
+Now replace your manual proxy with Go's built-in `httputil.ReverseProxy`. Compare how much less code it is.
 
 **What to do:**
 - Use `httputil.NewSingleHostReverseProxy(targetURL)` to create a reverse proxy
-- The target URL is the backend (e.g. `http://localhost:8080`)
-- For now, hardcode the backend URL — we'll make it dynamic in Phase 3
-- Replace your placeholder handler from Task 2.1 with the reverse proxy
+- Replace your manual handler from Task 2.2a with the reverse proxy
+- It implements `http.Handler`, so you can pass it directly to your server
 
 **How `httputil.ReverseProxy` works:**
 - You give it a target URL
 - It implements `http.Handler` — so you can pass it directly to your server
 - For every incoming request, it rewrites the URL to point at the target and forwards the request
 - It copies the response (status, headers, body) back to the original client
+- Under the hood, it does everything you did manually in 2.2a: creates a request, copies headers, streams body with `io.Copy`, writes the response back
 
 **Hints:**
 - `url.Parse("http://localhost:8080")` creates the target URL
 - `httputil.NewSingleHostReverseProxy(target)` returns an `*httputil.ReverseProxy` which is an `http.Handler`
-- To test: start a simple backend (e.g. `python3 -m http.server 8080`), then start your proxy, then `curl http://localhost:1355`
+- Compare the line count with your manual implementation — this is why Go's stdlib is powerful
 
 **Acceptance criteria:**
-- Start a backend on any port (e.g. 8080)
-- Start your proxy on 1355 pointing at the backend
-- `curl http://localhost:1355` returns the backend's response
-- `curl http://localhost:1355/some/path` forwards the path correctly
+- Same as 2.2a: forwarding works, paths preserved, response returned correctly
+- Your manual implementation from 2.2a can be kept as a comment or separate file for reference
 
 ---
 
@@ -169,6 +208,9 @@ func TestProxyForwards(t *testing.T) {
 ## Useful links
 
 - [`net/http` package](https://pkg.go.dev/net/http) — HTTP server and client
+- [`http.NewRequest`](https://pkg.go.dev/net/http#NewRequest) — create an outgoing request
+- [`http.Client`](https://pkg.go.dev/net/http#Client) — send requests and receive responses
+- [`io.Copy`](https://pkg.go.dev/io#Copy) — stream data between reader and writer
 - [`httputil.ReverseProxy`](https://pkg.go.dev/net/http/httputil#ReverseProxy) — built-in reverse proxy
 - [`httputil.NewSingleHostReverseProxy`](https://pkg.go.dev/net/http/httputil#NewSingleHostReverseProxy) — convenience constructor
 - [`httptest` package](https://pkg.go.dev/net/http/httptest) — test utilities for HTTP
@@ -178,14 +220,15 @@ func TestProxyForwards(t *testing.T) {
 
 ## Node.js vs Go
 
-| Node.js (upstream portless) | Go equivalent |
-|-----------------------------|---------------|
-| `http.createServer(handler)` | `http.Server{Handler: handler}` or `http.ListenAndServe` |
-| `http.request({hostname, port, path, method, headers}, cb)` + `pipe` | `httputil.ReverseProxy` does this for you |
-| `req.pipe(proxyReq)` / `proxyRes.pipe(res)` | Handled internally by `ReverseProxy` (uses `io.Copy`) |
-| `handler(req, res)` | `ServeHTTP(w http.ResponseWriter, r *http.Request)` |
+| Node.js (upstream portless) | Go manual (Task 2.2a) | Go with ReverseProxy (Task 2.2b) |
+|-----------------------------|----------------------|----------------------------------|
+| `http.createServer(handler)` | `http.ListenAndServe(addr, handler)` | Same |
+| `http.request({hostname, port, ...}, cb)` | `http.NewRequest(method, url, body)` + `client.Do(req)` | Handled by `ReverseProxy` |
+| `req.pipe(proxyReq)` | Pass `r.Body` to `http.NewRequest` | Handled by `ReverseProxy` |
+| `proxyRes.pipe(res)` | `io.Copy(w, resp.Body)` | Handled by `ReverseProxy` |
+| `res.writeHead(status, headers)` | Copy headers + `w.WriteHeader(status)` | Handled by `ReverseProxy` |
 
-The big difference: upstream portless builds the proxy **by hand** (manual `http.request` + pipe). In Go, `httputil.ReverseProxy` gives you all of that in one struct. This is a case where Go's standard library is actually **more convenient** than Node's.
+Upstream portless builds the proxy **by hand**. In Task 2.2a you'll do the same in Go so you understand the mechanics. Then in Task 2.2b, you'll see how `httputil.ReverseProxy` wraps all of that into a single struct.
 
 ## When you're done
 
