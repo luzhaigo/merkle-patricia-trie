@@ -23,27 +23,29 @@ Set up argument parsing, subcommand dispatch, and help/version output.
 
 Learn `net/http` and `httputil.ReverseProxy` by building a simple forwarding proxy.
 
-- [ ] Create an HTTP server that listens on a configurable port (default 1355)
-- [ ] Forward requests manually (`http.NewRequest` + `io.Copy`) with header handling and 502 error responses
-- [ ] Replace manual proxy with `httputil.ReverseProxy` and compare
-- [ ] Add loop detection with `X-Portless-Hops` header (508 Loop Detected)
-- [ ] Extract proxy logic into a `proxy/` package
-- [ ] Write tests for this phase
+- [x] Create an HTTP server that listens on a configurable port (default 1355)
+- [x] Forward requests manually (`http.NewRequest` + `io.Copy`) with header handling and 502 error responses
+- [x] Replace manual proxy with `httputil.ReverseProxy` and compare
+- [x] Add loop detection with `X-Portless-Hops` header (508 Loop Detected)
+- [x] Extract proxy logic into a `proxy/` package
+- [x] Write tests for this phase
 
 **Upstream reference:** `packages/portless/src/proxy.ts`
 
 ---
 
-## Phase 3: Host-based routing
+## Phase 3: Host-based routing — [Guide](docs/phase-3.md)
 
 Route requests to different backends based on the `Host` header.
 
-- [ ] Build a route table (`sync.Map` or mutex-guarded map) mapping hostnames to backend URLs
-- [ ] Parse the `Host` header and look up the target backend
+- [ ] Build a file-backed route table (JSON + `sync.RWMutex` + map) mapping hostnames to backend URLs
+- [ ] Use directory-based locking (`os.Mkdir` / `os.Remove` on a lock path, retry + stale mtime handling) around every `routes.json` read/write, like upstream
+- [ ] Route requests by parsing the `Host` header and looking up the target backend
+- [ ] Wire hardcoded routes from `main.go` to test routing and persistence end-to-end
 - [ ] Return 404 with a helpful message for unknown hosts
-- [ ] Write tests for this phase
+- [ ] Write tests for this phase (including persistence tests)
 
-**Upstream reference:** `packages/portless/src/proxy.ts` (routing logic)
+**Upstream reference:** `packages/portless/src/proxy.ts` (routing logic), `packages/portless/src/routes.ts` (route storage)
 
 ---
 
@@ -104,7 +106,7 @@ Finish the MVP with observability and cleanup.
 | Phase | Topic                        | Status         |
 | ----- | ---------------------------- | -------------- |
 | 1     | Basic CLI skeleton           | ✅ Complete     |
-| 2     | HTTP server & reverse proxy  | ⬜ Not Started  |
+| 2     | HTTP server & reverse proxy  | ✅ Complete     |
 | 3     | Host-based routing           | ⬜ Not Started  |
 | 4     | Route registration           | ⬜ Not Started  |
 | 5     | Child process spawning       | ⬜ Not Started  |
