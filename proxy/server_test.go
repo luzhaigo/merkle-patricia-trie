@@ -2,12 +2,25 @@ package proxy
 
 import (
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
 )
+
+// ephemeralPort returns a free TCP port on 127.0.0.1 for this instant.
+// Safe for parallel tests when each test uses its own port.
+func ephemeralPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	return ln.Addr().(*net.TCPAddr).Port
+}
 
 func getProxyURL(t *testing.T, addr string) string {
 	t.Helper()
@@ -59,6 +72,8 @@ func waitUntilServing(t *testing.T, baseURL string) {
 }
 
 func TestProxyForwards(t *testing.T) {
+	t.Parallel()
+
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if r.URL.Path == "/test" {
@@ -67,10 +82,12 @@ func TestProxyForwards(t *testing.T) {
 		}
 		w.Write([]byte("hello from backend"))
 	}))
-	defer backend.Close()
+	// Use Cleanup, not defer: parallel subtests return from t.Run before they finish;
+	// defer would close the backend while subtests still run.
+	t.Cleanup(func() { backend.Close() })
 
 	proxyURL := startTestServer(t, Config{
-		Port:    3000,
+		Port:    ephemeralPort(t),
 		Impl:    ReverseProxyImpl,
 		MaxHops: 2,
 		Backend: backend.URL,
@@ -87,6 +104,8 @@ func TestProxyForwards(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			resp, err := http.Get(proxyURL + tt.path)
 			if err != nil {
 				t.Fatalf("Get: %v", err)
@@ -109,8 +128,10 @@ func TestProxyForwards(t *testing.T) {
 }
 
 func Test502WhenBackendDown(t *testing.T) {
+	t.Parallel()
+
 	proxyURL := startTestServer(t, Config{
-		Port:    3000,
+		Port:    ephemeralPort(t),
 		Impl:    ReverseProxyImpl,
 		MaxHops: 2,
 		Backend: "http://localhost:8080",
@@ -126,6 +147,8 @@ func Test502WhenBackendDown(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			resp, err := http.Get(proxyURL + tt.path)
 			if err != nil {
 				t.Fatalf("Get: %v", err)
@@ -141,8 +164,10 @@ func Test502WhenBackendDown(t *testing.T) {
 }
 
 func TestHopLimit(t *testing.T) {
+	t.Parallel()
+
 	proxyURL := startTestServer(t, Config{
-		Port:    3000,
+		Port:    ephemeralPort(t),
 		Impl:    ReverseProxyImpl,
 		MaxHops: 2,
 		Backend: "http://localhost:8080",
@@ -158,6 +183,8 @@ func TestHopLimit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			req, err := http.NewRequest("GET", proxyURL+tt.path, nil)
 			if err != nil {
 				t.Fatalf("NewRequest: %v", err)
