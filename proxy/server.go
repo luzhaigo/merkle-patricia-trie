@@ -1,4 +1,4 @@
-package src
+package proxy
 
 import (
 	"io"

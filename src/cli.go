@@ -11,7 +11,7 @@ func runCommandWithName(name string, cmdArgs []string) error {
 	if len(cmdArgs) == 0 {
 		return fmt.Errorf("missing command after %s", name)
 	}
-	
+
 	fmt.Println("name:", name)
 	fmt.Println("cmd:", strings.Join(cmdArgs, " "))
 
@@ -68,7 +68,7 @@ func runRunMode(args []string) {
 		fmt.Fprintln(os.Stderr, "missing command")
 		os.Exit(1)
 	}
-	
+
 	var name string
 	if args[0] != "--name" {
 		dir, err := os.Getwd()
@@ -89,7 +89,7 @@ func runRunMode(args []string) {
 			os.Exit(1)
 		}
 
- 		name = args[1]
+		name = args[1]
 		args = args[2:]
 	}
 
@@ -99,7 +99,7 @@ func runRunMode(args []string) {
 	}
 
 	os.Exit(0)
-	
+
 }
 
 func Cli() {
@@ -112,9 +112,9 @@ func Cli() {
 
 	if args[0] == "run" {
 		runRunMode(args[1:])
-		return 
+		return
 	}
-	
+
 	runNamedMode(args)
-	
+
 }

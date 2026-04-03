@@ -6,9 +6,9 @@ import (
 
 func TestInferName(t *testing.T) {
 	tests := []struct {
-		dir string
+		dir  string
 		want string
-	} {
+	}{
 		{"/home/user/myproject", "myproject"},
 		{"/home/user/myproject/", "myproject"},
 		{"/home/user/myproject/subdir", "subdir"},
