@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"portless-go/proxy"
 	"strconv"
@@ -26,7 +27,19 @@ func main() {
 		Impl:    impl,
 		MaxHops: maxHopsInt,
 	}
-	if err := proxy.StartServer(config); err != nil {
+
+	srv, err := proxy.StartServer(config)
+	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
+	}
+
+	backend := config.Backend
+	if backend == "" {
+		backend = proxy.DefaultBackendURL
+	}
+	log.Printf("Server listening on %s, forwarding to %s", srv.Addr, backend)
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("ListenAndServe: %v", err)
 	}
 }

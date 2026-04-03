@@ -10,7 +10,7 @@ import (
 	"strconv"
 )
 
-var targetURL = "http://localhost:8080"
+var targetURL string
 
 func manualProxyHandler(w http.ResponseWriter, r *http.Request) {
 	req, err := http.NewRequest(r.Method, targetURL+r.URL.RequestURI(), r.Body)
@@ -91,7 +91,17 @@ func withHopLimit(maxHops int, handler http.Handler) http.Handler {
 	})
 }
 
-func StartServer(config Config) error {
+func StartServer(config Config) (*http.Server, error) {
+	if config.Port == 0 {
+		config.Port = DefaultPort
+	}
+
+	if config.Backend != "" {
+		targetURL = config.Backend
+	} else {
+		targetURL = DefaultBackendURL
+	}
+
 	var handler http.Handler
 	if config.Impl == ManualProxyImpl {
 		handler = http.HandlerFunc(manualProxyHandler)
@@ -103,6 +113,11 @@ func StartServer(config Config) error {
 	if config.MaxHops > 0 {
 		maxHops = config.MaxHops
 	}
-	return http.ListenAndServe(":"+strconv.Itoa(config.Port), withHopLimit(maxHops, handler))
 
+	srv := &http.Server{
+		Addr:    ":" + strconv.Itoa(config.Port),
+		Handler: withHopLimit(maxHops, handler),
+	}
+
+	return srv, nil
 }

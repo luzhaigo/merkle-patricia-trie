@@ -18,6 +18,7 @@ var HopByHopHeadersMap = func() map[string]bool {
 
 const (
 	DefaultPort           = 1355
+	DefaultBackendURL     = "http://localhost:8080"
 	XForwardedForHeader   = "X-Forwarded-For"
 	XForwardedPortHeader  = "X-Forwarded-Port"
 	XForwardedHostHeader  = "X-Forwarded-Host"
