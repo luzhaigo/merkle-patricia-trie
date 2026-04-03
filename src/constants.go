@@ -17,10 +17,13 @@ var HopByHopHeadersMap = func() map[string]bool {
 }()
 
 const (
-	DefaultPort = 1355
+	DefaultPort           = 1355
 	XForwardedForHeader   = "X-Forwarded-For"
 	XForwardedPortHeader  = "X-Forwarded-Port"
 	XForwardedHostHeader  = "X-Forwarded-Host"
 	XForwardedProtoHeader = "X-Forwarded-Proto"
 	XPortlessHopsHeader   = "X-Portless-Hops"
+
+	ReverseProxyImpl = "reverse"
+	ManualProxyImpl  = "manual"
 )

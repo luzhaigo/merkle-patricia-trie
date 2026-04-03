@@ -15,7 +15,8 @@ func main() {
 		port = envPort
 	}
 
-	if err := src.StartServer(port); err != nil {
+	impl := os.Getenv("IMPL")
+	if err := src.StartServer(port, impl); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
