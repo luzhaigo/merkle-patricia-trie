@@ -26,4 +26,6 @@ const (
 
 	ReverseProxyImpl = "reverse"
 	ManualProxyImpl  = "manual"
+
+	MaxHops = 5
 )

@@ -16,7 +16,17 @@ func main() {
 	}
 
 	impl := os.Getenv("IMPL")
-	if err := src.StartServer(port, impl); err != nil {
+	maxHops := os.Getenv("MAX_HOPS")
+	maxHopsInt := src.MaxHops
+	if envMaxHops, err := strconv.Atoi(maxHops); err == nil {
+		maxHopsInt = envMaxHops
+	}
+	config := src.Config{
+		Port:    port,
+		Impl:    impl,
+		MaxHops: maxHopsInt,
+	}
+	if err := src.StartServer(config); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

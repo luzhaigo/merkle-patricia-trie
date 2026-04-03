@@ -42,13 +42,6 @@ func manualProxyHandler(w http.ResponseWriter, r *http.Request) {
 		req.Header.Add(XForwardedProtoHeader, proto)
 	}
 
-	hops := r.Header.Get(XPortlessHopsHeader)
-	hopsInt := 0
-	if hopsInt, err = strconv.Atoi(hops); err == nil {
-		hopsInt++
-	}
-	req.Header.Set(XPortlessHopsHeader, strconv.Itoa(hopsInt))
-
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		log.Printf("proxy error: %v", err)
@@ -81,14 +74,35 @@ func newReverseProxyHandler() http.Handler {
 	return httputil.NewSingleHostReverseProxy(target)
 }
 
-func StartServer(port int, impl string) error {
+func withHopLimit(maxHops int, handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hops, err := strconv.Atoi(r.Header.Get(XPortlessHopsHeader))
+		if err != nil {
+			hops = 0
+		}
+		if hops >= maxHops {
+			w.WriteHeader(http.StatusLoopDetected)
+			w.Write([]byte("Loop detected: too many proxy hops"))
+			return
+		}
+
+		r.Header.Set(XPortlessHopsHeader, strconv.Itoa(hops+1))
+		handler.ServeHTTP(w, r)
+	})
+}
+
+func StartServer(config Config) error {
 	var handler http.Handler
-	if impl == ManualProxyImpl {
+	if config.Impl == ManualProxyImpl {
 		handler = http.HandlerFunc(manualProxyHandler)
 	} else {
 		handler = newReverseProxyHandler()
 	}
 
-	return http.ListenAndServe(":"+strconv.Itoa(port), handler)
+	maxHops := MaxHops
+	if config.MaxHops > 0 {
+		maxHops = config.MaxHops
+	}
+	return http.ListenAndServe(":"+strconv.Itoa(config.Port), withHopLimit(maxHops, handler))
 
 }
