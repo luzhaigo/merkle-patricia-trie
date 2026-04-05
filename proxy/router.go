@@ -7,25 +7,27 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 )
 
 type Route struct {
 	Hostname string `json:"hostname"`
 	Backend  string `json:"backend"`
+	PID      int    `json:"pid"`
 }
 
 type RouteTable struct {
-	routes   map[string]string
+	routes   map[string]Route
 	mu       sync.RWMutex
 	filePath string
 	lockPath string
 }
 
-// NewRouteTable builds a route table; lockPath defaults to routes.lock beside filePath.
-func NewRouteTable(filePath string) *RouteTable {
+// New builds a route table; lockPath defaults to routes.lock beside filePath.
+func New(filePath string) *RouteTable {
 	return &RouteTable{
-		routes:   make(map[string]string),
+		routes:   make(map[string]Route),
 		filePath: filePath,
 		lockPath: filepath.Join(filepath.Dir(filePath), "routes.lock"),
 	}
@@ -90,7 +92,11 @@ func (rt *RouteTable) AddRoute(hostname, backendURL string) (err error) {
 	}
 	defer func() { err = rt.releaseDirLockJoin(err) }()
 
-	rt.routes[hostname] = backendURL
+	rt.routes[hostname] = Route{
+		Hostname: hostname,
+		Backend:  backendURL,
+		PID:      os.Getpid(),
+	}
 	return rt.save()
 }
 
@@ -111,7 +117,7 @@ func (rt *RouteTable) Lookup(hostname string) (string, bool) {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 	v, ok := rt.routes[hostname]
-	return v, ok
+	return v.Backend, ok
 }
 
 func (rt *RouteTable) Load() (err error) {
@@ -125,7 +131,7 @@ func (rt *RouteTable) Load() (err error) {
 	data, rerr := os.ReadFile(rt.filePath)
 	if rerr != nil {
 		if errors.Is(rerr, os.ErrNotExist) {
-			rt.routes = make(map[string]string)
+			rt.routes = make(map[string]Route)
 			return nil
 		}
 		return rerr
@@ -133,7 +139,7 @@ func (rt *RouteTable) Load() (err error) {
 
 	var routes []Route
 	if len(data) == 0 {
-		rt.routes = make(map[string]string)
+		rt.routes = make(map[string]Route)
 		return nil
 	}
 
@@ -141,21 +147,30 @@ func (rt *RouteTable) Load() (err error) {
 		return err
 	}
 
-	loaded := make(map[string]string, len(routes))
+	rt.routes = make(map[string]Route, len(routes))
+	pruned := false
 	for _, route := range routes {
-		loaded[route.Hostname] = route.Backend
+		if routeProcessAlive(route.PID) {
+			rt.routes[route.Hostname] = route
+		} else {
+			pruned = true
+		}
 	}
-	rt.routes = loaded
+
+	if pruned {
+		return rt.save()
+	}
 
 	return nil
 }
 
 func (rt *RouteTable) save() error {
 	routes := make([]Route, 0, len(rt.routes))
-	for hostname, backendURL := range rt.routes {
+	for hostname, route := range rt.routes {
 		routes = append(routes, Route{
 			Hostname: hostname,
-			Backend:  backendURL,
+			Backend:  route.Backend,
+			PID:      route.PID,
 		})
 	}
 	data, err := json.MarshalIndent(routes, "", "  ")
@@ -164,4 +179,19 @@ func (rt *RouteTable) save() error {
 	}
 
 	return os.WriteFile(rt.filePath, data, 0644)
+}
+
+// routeProcessAlive reports whether this route's owning PID still exists.
+// PID <= 0 means "no owner" (missing or zero pid in JSON) — we treat that like
+// a dead owner and drop the route on Load so legacy files cannot keep stale entries.
+func routeProcessAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return p.Signal(syscall.Signal(0)) == nil
 }

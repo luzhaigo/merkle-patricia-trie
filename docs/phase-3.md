@@ -176,7 +176,7 @@ type RouteTable struct {
 - Constructor (example — you can pass `lockPath` explicitly instead). Use `import "path/filepath"` for `filepath.Join`:
 
 ```go
-func NewRouteTable(filePath string) *RouteTable {
+func New(filePath string) *RouteTable {
     lockPath := filepath.Join(filepath.Dir(filePath), "routes.lock")
     return &RouteTable{
         routes:   make(map[string]string),
@@ -306,7 +306,7 @@ Creating a new `httputil.ReverseProxy` on every request works but wastes allocat
 - For now, hardcode a couple of routes in `main.go` to test the routing:
 
 ```go
-rt := proxy.NewRouteTable("/tmp/portless-go/routes.json")
+rt := proxy.New("/tmp/portless-go/routes.json")
 rt.Load()  // load any persisted routes
 rt.AddRoute("myapp.localhost", "http://localhost:3000")
 rt.AddRoute("api.localhost", "http://localhost:4000")
