@@ -49,7 +49,7 @@ Route requests to different backends based on the `Host` header.
 
 ---
 
-## Phase 4: Route registration
+## Phase 4: Route registration — [Guide](docs/phase-4.md)
 
 Provide a way to add and remove routes at runtime.
 
@@ -107,8 +107,8 @@ Finish the MVP with observability and cleanup.
 | ----- | ---------------------------- | -------------- |
 | 1     | Basic CLI skeleton           | ✅ Complete     |
 | 2     | HTTP server & reverse proxy  | ✅ Complete     |
-| 3     | Host-based routing           | ⬜ Not Started  |
-| 4     | Route registration           | ⬜ Not Started  |
+| 3     | Host-based routing           | ✅ Complete     |
+| 4     | Route registration — [Guide](docs/phase-4.md) | ⬜ Not Started  |
 | 5     | Child process spawning       | ⬜ Not Started  |
 | 6     | Wiring it all together       | ⬜ Not Started  |
 | 7     | `list` command and polish    | ⬜ Not Started  |
