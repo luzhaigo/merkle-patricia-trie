@@ -210,7 +210,15 @@ func withHopLimit(maxHops int, handler http.Handler) http.Handler {
 }
 
 func GetRoutesFilePath() string {
-	return filepath.Join(os.Getenv("HOME"), src.Name, "routes.json")
+	segments := []string{".", src.Name, "routes.json"}
+
+	if userConfigDir, err := os.UserConfigDir(); err == nil {
+		segments[0] = userConfigDir
+	} else if wd, err := os.Getwd(); err == nil {
+		segments[0] = wd
+	}
+
+	return filepath.Join(segments...)
 }
 
 var cache = make(map[string]http.Handler)

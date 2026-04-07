@@ -307,8 +307,8 @@ Do **not** allocate a new `httputil.ReverseProxy` on every request. **Cache** on
 - For now, hardcode a couple of routes in `main.go` to test the routing:
 
 ```go
-rt := proxy.NewRouteTable("/tmp/portless-go/routes.json")
-rt.Load()  // load any persisted routes
+rt := proxy.NewRouteTable(proxy.GetRoutesFilePath())
+rt.Load() // load any persisted routes (optional if `StartServer` already calls `Load`)
 rt.AddRoute("myapp.localhost", "http://localhost:3000")
 rt.AddRoute("api.localhost", "http://localhost:4000")
 ```
@@ -330,7 +330,9 @@ curl -H "Host: api.localhost" http://localhost:1355/
 curl -H "Host: unknown.localhost" http://localhost:1355/
 
 # Verify persistence:
-cat /tmp/portless-go/routes.json
+cat "$(go env HOME)/Library/Application Support/portless-go/routes.json"  # macOS (typical)
+# or just print what the program uses:
+# go test ./proxy -run TestDummy -count=1   # (optional) / or log it in main.go while learning
 ```
 
 **Why hardcode for now?** Phase 4 will add a proper registration API. For this phase, we just need to verify the routing and persistence work.
