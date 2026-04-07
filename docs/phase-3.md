@@ -176,7 +176,7 @@ type RouteTable struct {
 - Constructor (example — you can pass `lockPath` explicitly instead). Use `import "path/filepath"` for `filepath.Join`:
 
 ```go
-func New(filePath string) *RouteTable {
+func NewRouteTable(filePath string) *RouteTable {
     lockPath := filepath.Join(filepath.Dir(filePath), "routes.lock")
     return &RouteTable{
         routes:   make(map[string]string),
@@ -281,9 +281,9 @@ if !ok {
 // Forward to backend...
 ```
 
-**Design decision — creating proxies per request vs caching:**
+**Design decision — cache reverse proxies (required for this phase):**
 
-Creating a new `httputil.ReverseProxy` on every request works but wastes allocations. A common pattern is to cache reverse proxies per backend URL. You can store them alongside routes in the table, or use `sync.Map`. For this learning project, creating one per request is fine — optimize later if you want.
+Do **not** allocate a new `httputil.ReverseProxy` on every request. **Cache** one `ReverseProxy` per distinct backend URL (or per hostname, if each route maps 1:1 to a backend). Typical approaches: a `map[string]*httputil.ReverseProxy` protected by the same `sync.RWMutex` as your routes, or a `sync.Map` keyed by backend URL. **Invalidate or update** the cache when routes change (`AddRoute` / `RemoveRoute` / `Load`) so you never forward to a stale target. This matches how you’d avoid repeated work in a real proxy.
 
 **Hints:**
 - `r.Host` gives you the `Host` header value (e.g. `myapp.localhost:1355`)
@@ -296,6 +296,7 @@ Creating a new `httputil.ReverseProxy` on every request works but wastes allocat
 - Requests with a registered `Host` are forwarded to the correct backend
 - Requests with an unknown `Host` get 404
 - Multiple routes can be registered, each going to a different backend
+- Reverse proxies are **reused** (cached per backend or per host), not recreated on every request; cache stays consistent when routes change
 - Hop limit still works
 
 ---
@@ -306,7 +307,7 @@ Creating a new `httputil.ReverseProxy` on every request works but wastes allocat
 - For now, hardcode a couple of routes in `main.go` to test the routing:
 
 ```go
-rt := proxy.New("/tmp/portless-go/routes.json")
+rt := proxy.NewRouteTable("/tmp/portless-go/routes.json")
 rt.Load()  // load any persisted routes
 rt.AddRoute("myapp.localhost", "http://localhost:3000")
 rt.AddRoute("api.localhost", "http://localhost:4000")

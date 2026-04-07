@@ -24,8 +24,8 @@ type RouteTable struct {
 	lockPath string
 }
 
-// New builds a route table; lockPath defaults to routes.lock beside filePath.
-func New(filePath string) *RouteTable {
+// NewRouteTable builds a route table; lockPath defaults to routes.lock beside filePath.
+func NewRouteTable(filePath string) *RouteTable {
 	return &RouteTable{
 		routes:   make(map[string]Route),
 		filePath: filePath,

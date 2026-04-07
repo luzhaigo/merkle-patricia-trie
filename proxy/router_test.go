@@ -12,7 +12,7 @@ func mockRoutesFile(t *testing.T, filePath string) *RouteTable {
 	if err != nil {
 		t.Fatalf("Failed to write routes file: %v", err)
 	}
-	return New(filePath)
+	return NewRouteTable(filePath)
 }
 
 func TestPruneStalePID(t *testing.T) {

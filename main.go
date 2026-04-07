@@ -22,24 +22,21 @@ func main() {
 	if envMaxHops, err := strconv.Atoi(maxHops); err == nil {
 		maxHopsInt = envMaxHops
 	}
-	backend := os.Getenv("BACKEND")
-	if backend == "" {
-		backend = proxy.DefaultBackendURL
-	}
 
 	config := proxy.Config{
 		Port:    port,
 		Impl:    impl,
 		MaxHops: maxHopsInt,
-		Backend: backend,
 	}
 
-	srv, err := proxy.StartServer(config)
+	rt := proxy.NewRouteTable(proxy.GetRoutesFilePath())
+
+	srv, err := proxy.StartServer(config, rt)
 	if err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 
-	log.Printf("Server listening on %s, forwarding to %s", srv.Addr, config.Backend)
+	log.Printf("Server listening on %s (host-based routing)", srv.Addr)
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("ListenAndServe: %v", err)

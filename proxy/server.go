@@ -1,17 +1,54 @@
 package proxy
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"path/filepath"
+	"portless-go/src"
 	"strconv"
+	"sync"
 )
 
-func manualProxyFor(backend string) http.HandlerFunc {
+func isBackendUnreachable(err error) bool {
+	// Treat common network-layer failures as "unreachable". ReverseProxy can also
+	// call ErrorHandler for other cases (e.g. client cancel), so keep this narrow.
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return true
+	}
+	var opErr *net.OpError
+	if errors.As(err, &opErr) {
+		return true
+	}
+	return false
+}
+
+func reloadRoutesAndClearCache(rt *RouteTable) {
+	if err := rt.Load(); err != nil {
+		log.Printf("reload route table: %v", err)
+		return
+	}
+	// Minimal cache consistency: after a reload, drop cached handlers so the next
+	// request rebuilds proxies for the current backend set.
+	cacheMu.Lock()
+	cache = make(map[string]http.Handler)
+	cacheMu.Unlock()
+}
+
+func manualProxyForBackend(backend string, rt *RouteTable) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		req, err := http.NewRequest(r.Method, backend+r.URL.RequestURI(), r.Body)
 		if err != nil {
@@ -47,6 +84,9 @@ func manualProxyFor(backend string) http.HandlerFunc {
 			log.Printf("proxy error: %v", err)
 			w.WriteHeader(http.StatusBadGateway)
 			w.Write([]byte("Bad Gateway: backend unreachable"))
+			if isBackendUnreachable(err) {
+				reloadRoutesAndClearCache(rt)
+			}
 			return
 		}
 		defer resp.Body.Close()
@@ -67,12 +107,89 @@ func manualProxyFor(backend string) http.HandlerFunc {
 	}
 }
 
-func reverseProxyFor(backend string) (http.Handler, error) {
-	target, err := url.Parse(backend)
-	if err != nil {
-		return nil, err
+func manualProxyFor(rt *RouteTable) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		host := getHost(r.Host)
+
+		backend, ok := rt.Lookup(host)
+		if !ok {
+			http.Error(w, "No app registered for "+host, http.StatusNotFound)
+			return
+		}
+
+		h, ok := lookupCache(backend)
+		if ok {
+			h.ServeHTTP(w, r)
+			return
+		}
+
+		cacheMu.Lock()
+		// Double-check under lock to avoid duplicate work.
+		h, ok = cache[backend]
+		if !ok {
+			h = manualProxyForBackend(backend, rt)
+			cache[backend] = h
+		}
+		cacheMu.Unlock()
+		h.ServeHTTP(w, r)
 	}
-	return httputil.NewSingleHostReverseProxy(target), nil
+}
+
+func getHost(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+
+	return host
+}
+
+func lookupCache(backend string) (http.Handler, bool) {
+	cacheMu.RLock()
+	defer cacheMu.RUnlock()
+	h, ok := cache[backend]
+	return h, ok
+
+}
+
+func reverseProxyFor(rt *RouteTable) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := getHost(r.Host)
+
+		backend, ok := rt.Lookup(host)
+		if !ok {
+			http.Error(w, "No app registered for "+host, http.StatusNotFound)
+			return
+		}
+
+		h, ok := lookupCache(backend)
+		if ok {
+			h.ServeHTTP(w, r)
+			return
+		}
+
+		target, err := url.Parse(backend)
+		if err != nil {
+			http.Error(w, "Invalid backend URL: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		cacheMu.Lock()
+		// Double-check under lock to avoid duplicate work.
+		h, ok = cache[backend]
+		if !ok {
+			proxy := httputil.NewSingleHostReverseProxy(target)
+			proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+				http.Error(w, "Bad Gateway: backend unreachable", http.StatusBadGateway)
+				if isBackendUnreachable(err) {
+					reloadRoutesAndClearCache(rt)
+				}
+			}
+			h = proxy
+			cache[backend] = h
+		}
+		cacheMu.Unlock()
+		h.ServeHTTP(w, r)
+	})
 }
 
 func withHopLimit(maxHops int, handler http.Handler) http.Handler {
@@ -92,24 +209,27 @@ func withHopLimit(maxHops int, handler http.Handler) http.Handler {
 	})
 }
 
-func StartServer(config Config) (*http.Server, error) {
+func GetRoutesFilePath() string {
+	return filepath.Join(os.Getenv("HOME"), src.Name, "routes.json")
+}
+
+var cache = make(map[string]http.Handler)
+var cacheMu sync.RWMutex
+
+func StartServer(config Config, rt *RouteTable) (*http.Server, error) {
+	if err := rt.Load(); err != nil {
+		return nil, err
+	}
+
 	if config.Port == 0 {
 		config.Port = DefaultPort
 	}
 
-	if config.Backend == "" {
-		return nil, fmt.Errorf("backend URL is required")
-	}
-
 	var handler http.Handler
 	if config.Impl == ManualProxyImpl {
-		handler = manualProxyFor(config.Backend)
+		handler = manualProxyFor(rt)
 	} else {
-		var err error
-		handler, err = reverseProxyFor(config.Backend)
-		if err != nil {
-			return nil, fmt.Errorf("invalid backend URL: %w", err)
-		}
+		handler = reverseProxyFor(rt)
 	}
 
 	maxHops := MaxHops
