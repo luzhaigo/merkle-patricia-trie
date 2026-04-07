@@ -71,10 +71,10 @@ func waitUntilServing(t *testing.T, baseURL string) {
 	t.Fatal("server did not become ready in time")
 }
 
-func TestProxyForwards(t *testing.T) {
+func TestRoutingByHost(t *testing.T) {
 	t.Parallel()
 
-	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	myappBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if r.URL.Path == "/test" {
 			w.Write([]byte("hello from backend from /test"))
@@ -84,10 +84,25 @@ func TestProxyForwards(t *testing.T) {
 	}))
 	// Use Cleanup, not defer: parallel subtests return from t.Run before they finish;
 	// defer would close the backend while subtests still run.
-	t.Cleanup(func() { backend.Close() })
+	t.Cleanup(func() { myappBackend.Close() })
+
+	apiBackend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if r.URL.Path == "/test" {
+			w.Write([]byte("hello from backend from /test"))
+			return
+		}
+		w.Write([]byte("hello from backend"))
+	}))
+	// Use Cleanup, not defer: parallel subtests return from t.Run before they finish;
+	// defer would close the backend while subtests still run.
+	t.Cleanup(func() { apiBackend.Close() })
 
 	rt := newRouteTable(t)
-	if err := rt.AddRoute("myapp.localhost", backend.URL); err != nil {
+	if err := rt.AddRoute("myapp.localhost", myappBackend.URL); err != nil {
+		t.Fatalf("AddRoute: %v", err)
+	}
+	if err := rt.AddRoute("api.localhost", apiBackend.URL); err != nil {
 		t.Fatalf("AddRoute: %v", err)
 	}
 
@@ -97,15 +112,14 @@ func TestProxyForwards(t *testing.T) {
 		MaxHops: 2,
 	}, rt)
 
-	const routeHost = "myapp.localhost"
-
 	tests := []struct {
 		name     string
+		host     string
 		path     string
 		wantBody string
 	}{
-		{"root_path", "/", "hello from backend"},
-		{"specific_path", "/test", "hello from backend from /test"},
+		{"root_path", "myapp.localhost", "/", "hello from backend"},
+		{"specific_path", "api.localhost", "/test", "hello from backend from /test"},
 	}
 
 	for _, tt := range tests {
@@ -116,7 +130,7 @@ func TestProxyForwards(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewRequest: %v", err)
 			}
-			req.Host = routeHost
+			req.Host = tt.host
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
@@ -190,7 +204,7 @@ func Test502WhenBackendDown(t *testing.T) {
 	}
 }
 
-func TestHopLimit(t *testing.T) {
+func TestRoutingWithHopLimit(t *testing.T) {
 	t.Parallel()
 
 	rt := newRouteTable(t)
@@ -229,4 +243,31 @@ func TestHopLimit(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUnknownHostReturns404(t *testing.T) {
+	t.Parallel()
+
+	rt := newRouteTable(t)
+
+	proxyURL := startTestServer(t, Config{
+		Port: ephemeralPort(t),
+		Impl: ReverseProxyImpl,
+	}, rt)
+
+	req, err := http.NewRequest("GET", proxyURL+"/", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Host = "unknown.localhost"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status: got %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+
 }
