@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"syscall"
 	"time"
@@ -113,11 +115,11 @@ func (rt *RouteTable) RemoveRoute(hostname string) (err error) {
 	return rt.save()
 }
 
-func (rt *RouteTable) Lookup(hostname string) (string, bool) {
+func (rt *RouteTable) Lookup(hostname string) (Route, bool) {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 	v, ok := rt.routes[hostname]
-	return v.Backend, ok
+	return v, ok
 }
 
 func (rt *RouteTable) Load() (err error) {
@@ -179,6 +181,13 @@ func (rt *RouteTable) save() error {
 	}
 
 	return os.WriteFile(rt.filePath, data, 0644)
+}
+
+func (rt *RouteTable) ListRoutes() []Route {
+	rt.mu.RLock()
+	defer rt.mu.RUnlock()
+
+	return slices.Collect(maps.Values(rt.routes))
 }
 
 // routeProcessAlive reports whether this route's owning PID still exists.

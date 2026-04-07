@@ -38,10 +38,11 @@ func TestAddAndLookup(t *testing.T) {
 			t.Fatalf("AddRoute: %v", err)
 		}
 
-		backend, ok := rt.Lookup(tt.hostname)
+		route, ok := rt.Lookup(tt.hostname)
 		if !ok {
 			t.Fatalf("Lookup: %v", tt.hostname)
 		}
+		backend := route.Backend
 		if backend != tt.backend {
 			t.Fatalf("Lookup: got %q, want %q", backend, tt.backend)
 		}
@@ -52,10 +53,11 @@ func TestLookupUnknown(t *testing.T) {
 	t.Parallel()
 
 	rt, _ := newTestRouteTable(t)
-	backend, ok := rt.Lookup("unknown.localhost")
+	route, ok := rt.Lookup("unknown.localhost")
 	if ok {
-		t.Fatalf("Lookup: got %q, want false", backend)
+		t.Fatalf("Lookup: got %q, want false", route.Backend)
 	}
+	backend := route.Backend
 	if backend != "" {
 		t.Fatalf("Lookup: got %q, want empty string", backend)
 	}
@@ -68,10 +70,11 @@ func TestRemoveRoute(t *testing.T) {
 	rt.AddRoute("myapp.localhost", "http://localhost:3000")
 	rt.RemoveRoute("myapp.localhost")
 
-	backend, ok := rt.Lookup("myapp.localhost")
+	route, ok := rt.Lookup("myapp.localhost")
 	if ok {
-		t.Fatalf("Lookup: got %q, want false", backend)
+		t.Fatalf("Lookup: got %q, want false", route.Backend)
 	}
+	backend := route.Backend
 	if backend != "" {
 		t.Fatalf("Lookup: got %q, want empty string", backend)
 	}
@@ -88,10 +91,11 @@ func TestOverwriteRoute(t *testing.T) {
 		t.Fatalf("AddRoute: %v", err)
 	}
 
-	backend, ok := rt.Lookup("myapp.localhost")
+	route, ok := rt.Lookup("myapp.localhost")
 	if !ok {
-		t.Fatalf("Lookup: got %q, want true", backend)
+		t.Fatalf("Lookup: got %q, want true", route.Backend)
 	}
+	backend := route.Backend
 	if backend != "http://localhost:4000" {
 		t.Fatalf("Lookup: got %q, want http://localhost:4000", backend)
 	}

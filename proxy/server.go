@@ -111,12 +111,13 @@ func manualProxyFor(rt *RouteTable) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		host := getHost(r.Host)
 
-		backend, ok := rt.Lookup(host)
+		route, ok := rt.Lookup(host)
 		if !ok {
 			http.Error(w, "No app registered for "+host, http.StatusNotFound)
 			return
 		}
 
+		backend := route.Backend
 		h, ok := lookupCache(backend)
 		if ok {
 			h.ServeHTTP(w, r)
@@ -155,12 +156,13 @@ func reverseProxyFor(rt *RouteTable) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := getHost(r.Host)
 
-		backend, ok := rt.Lookup(host)
+		route, ok := rt.Lookup(host)
 		if !ok {
 			http.Error(w, "No app registered for "+host, http.StatusNotFound)
 			return
 		}
 
+		backend := route.Backend
 		h, ok := lookupCache(backend)
 		if ok {
 			h.ServeHTTP(w, r)
@@ -223,6 +225,12 @@ func GetRoutesFilePath() string {
 
 var cache = make(map[string]http.Handler)
 var cacheMu sync.RWMutex
+
+func ClearProxyCache() {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	cache = make(map[string]http.Handler)
+}
 
 func StartServer(config Config, rt *RouteTable) (*http.Server, error) {
 	if err := rt.Load(); err != nil {
