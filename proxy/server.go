@@ -232,13 +232,21 @@ func ClearProxyCache() {
 	cache = make(map[string]http.Handler)
 }
 
-func StartServer(config Config, rt *RouteTable) (*http.Server, error) {
+func StartServer(config Config, rt *RouteTable) (*http.Server, *http.Server, error) {
 	if err := rt.Load(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if config.Port == 0 {
 		config.Port = DefaultPort
+	}
+
+	if config.AdminPort == 0 {
+		config.AdminPort = config.Port + 1
+	}
+
+	if config.AdminPort == config.Port {
+		return nil, nil, errors.New("admin port cannot be the same as the proxy port")
 	}
 
 	var handler http.Handler
@@ -258,5 +266,11 @@ func StartServer(config Config, rt *RouteTable) (*http.Server, error) {
 		Handler: withHopLimit(maxHops, handler),
 	}
 
-	return srv, nil
+	adminMux := AdminHandler(rt)
+	adminSrv := &http.Server{
+		Addr:    ":" + strconv.Itoa(config.AdminPort),
+		Handler: adminMux,
+	}
+
+	return srv, adminSrv, nil
 }

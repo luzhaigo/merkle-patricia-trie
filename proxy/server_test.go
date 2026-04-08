@@ -37,7 +37,7 @@ func getProxyURL(t *testing.T, addr string) string {
 func startTestServer(t *testing.T, config Config, rt *RouteTable) (proxyURL string) {
 	t.Helper()
 
-	srv, err := StartServer(config, rt)
+	srv, _, err := StartServer(config, rt)
 	if err != nil {
 		t.Fatalf("StartServer: %v", err)
 	}
