@@ -86,13 +86,43 @@ func (rt *RouteTable) releaseDirLockJoin(err error) error {
 	return err
 }
 
-func (rt *RouteTable) AddRoute(hostname, backendURL string) (err error) {
+var ErrRouteExists = errors.New("route already exists")
+
+// RouteConflictError is returned when a hostname is still owned by another live process.
+// The current process may replace its own registration (same PID) without force.
+// Error() is safe to expose in HTTP JSON; Unwrap makes errors.Is(_, ErrRouteExists) work.
+type RouteConflictError struct {
+	Hostname    string
+	ExistingPID int
+}
+
+func (e *RouteConflictError) Error() string {
+	return fmt.Sprintf("%s is already registered by PID %d", e.Hostname, e.ExistingPID)
+}
+
+func (e *RouteConflictError) Unwrap() error { return ErrRouteExists }
+
+func (rt *RouteTable) AddRoute(hostname, backendURL string, force bool) (err error) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	if err = rt.acquireDirLock(); err != nil {
 		return err
 	}
 	defer func() { err = rt.releaseDirLockJoin(err) }()
+
+	if route, ok := rt.routes[hostname]; ok {
+		// Same PID as us = same owner refreshing the route (upstream-style); not a conflict.
+		sameOwner := route.PID == os.Getpid()
+		if !force && routeProcessAlive(route.PID) && !sameOwner {
+			return &RouteConflictError{Hostname: hostname, ExistingPID: route.PID}
+		}
+
+		if !sameOwner {
+			if p, err1 := os.FindProcess(route.PID); err1 == nil {
+				p.Signal(syscall.SIGTERM)
+			}
+		}
+	}
 
 	rt.routes[hostname] = Route{
 		Hostname: hostname,

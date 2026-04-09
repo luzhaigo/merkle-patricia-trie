@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 )
@@ -9,6 +10,7 @@ import (
 type addRouteRequest struct {
 	Hostname string `json:"hostname"`
 	Backend  string `json:"backend"`
+	Force    bool   `json:"force"`
 }
 
 type jsonErrorResponse struct {
@@ -26,6 +28,7 @@ func AdminHandler(rt *RouteTable) *http.ServeMux {
 	sm := http.NewServeMux()
 
 	sm.HandleFunc("POST /routes", func(w http.ResponseWriter, r *http.Request) {
+		force := r.URL.Query().Get("force") == "true"
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -42,8 +45,18 @@ func AdminHandler(rt *RouteTable) *http.ServeMux {
 			return
 		}
 
-		err = rt.AddRoute(req.Hostname, req.Backend)
+		if !force {
+			force = req.Force
+		}
+
+		err = rt.AddRoute(req.Hostname, req.Backend, force)
 		if err != nil {
+			var conflict *RouteConflictError
+			if errors.As(err, &conflict) {
+				writeJSONError(w, http.StatusConflict, conflict.Error())
+				return
+			}
+
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}

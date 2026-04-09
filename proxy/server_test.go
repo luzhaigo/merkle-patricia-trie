@@ -99,10 +99,10 @@ func TestRoutingByHost(t *testing.T) {
 	t.Cleanup(func() { apiBackend.Close() })
 
 	rt := newRouteTable(t)
-	if err := rt.AddRoute("myapp.localhost", myappBackend.URL); err != nil {
+	if err := rt.AddRoute("myapp.localhost", myappBackend.URL, false); err != nil {
 		t.Fatalf("AddRoute: %v", err)
 	}
-	if err := rt.AddRoute("api.localhost", apiBackend.URL); err != nil {
+	if err := rt.AddRoute("api.localhost", apiBackend.URL, false); err != nil {
 		t.Fatalf("AddRoute: %v", err)
 	}
 
@@ -163,7 +163,7 @@ func Test502WhenBackendDown(t *testing.T) {
 	t.Parallel()
 
 	rt := newRouteTable(t)
-	rt.AddRoute("myapp.localhost", "http://localhost:3000")
+	rt.AddRoute("myapp.localhost", "http://localhost:3000", false)
 
 	proxyURL := startTestServer(t, Config{
 		Port:    ephemeralPort(t),

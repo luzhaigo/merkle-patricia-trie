@@ -34,7 +34,7 @@ func TestAddAndLookup(t *testing.T) {
 		{"api.localhost", "http://localhost:4000"},
 	}
 	for _, tt := range tests {
-		if err := rt.AddRoute(tt.hostname, tt.backend); err != nil {
+		if err := rt.AddRoute(tt.hostname, tt.backend, false); err != nil {
 			t.Fatalf("AddRoute: %v", err)
 		}
 
@@ -67,7 +67,7 @@ func TestRemoveRoute(t *testing.T) {
 	t.Parallel()
 
 	rt, _ := newTestRouteTable(t)
-	rt.AddRoute("myapp.localhost", "http://localhost:3000")
+	rt.AddRoute("myapp.localhost", "http://localhost:3000", false)
 	rt.RemoveRoute("myapp.localhost")
 
 	route, ok := rt.Lookup("myapp.localhost")
@@ -84,10 +84,11 @@ func TestOverwriteRoute(t *testing.T) {
 	t.Parallel()
 
 	rt, _ := newTestRouteTable(t)
-	if err := rt.AddRoute("myapp.localhost", "http://localhost:3000"); err != nil {
+	if err := rt.AddRoute("myapp.localhost", "http://localhost:3000", false); err != nil {
 		t.Fatalf("AddRoute: %v", err)
 	}
-	if err := rt.AddRoute("myapp.localhost", "http://localhost:4000"); err != nil {
+	// Same process owns the route: update backend without force (upstream same-owner rule).
+	if err := rt.AddRoute("myapp.localhost", "http://localhost:4000", false); err != nil {
 		t.Fatalf("AddRoute: %v", err)
 	}
 
@@ -105,7 +106,7 @@ func TestPersistence(t *testing.T) {
 	t.Parallel()
 
 	rt, filePath := newTestRouteTable(t)
-	if err := rt.AddRoute("myapp.localhost", "http://localhost:3000"); err != nil {
+	if err := rt.AddRoute("myapp.localhost", "http://localhost:3000", false); err != nil {
 		t.Fatalf("AddRoute: %v", err)
 	}
 
