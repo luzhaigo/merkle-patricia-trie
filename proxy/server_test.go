@@ -1,7 +1,9 @@
 package proxy
 
 import (
+	"context"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -34,41 +36,75 @@ func getProxyURL(t *testing.T, addr string) string {
 
 // startTestServer builds the server, runs ListenAndServe in a goroutine, and
 // waits until TCP accepts connections. The server is closed on test cleanup.
-func startTestServer(t *testing.T, config Config, rt *RouteTable) (proxyURL string) {
+func startTestServer(t *testing.T, config Config, rt *RouteTable) (proxyURL, adminURL string) {
 	t.Helper()
 
-	srv, _, err := StartServer(config, rt)
+	// Do not use Port+1 for admin under t.Parallel(): another test's proxy may
+	// already use that port. Pick a separate ephemeral port when unset.
+	if config.AdminPort == 0 {
+		config.AdminPort = ephemeralPort(t)
+		for config.AdminPort == config.Port {
+			config.AdminPort = ephemeralPort(t)
+		}
+	}
+
+	srv, adminSrv, err := StartServer(config, rt)
 	if err != nil {
 		t.Fatalf("StartServer: %v", err)
 	}
 
 	go func() {
-		_ = srv.ListenAndServe()
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("proxy ListenAndServe: %v", err)
+		}
+	}()
+	go func() {
+		if err := adminSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("admin ListenAndServe: %v", err)
+		}
 	}()
 
 	t.Cleanup(func() {
-		_ = srv.Close()
+		err := srv.Close()
+		if err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		err = adminSrv.Close()
+		if err != nil {
+			t.Fatalf("Close: %v", err)
+		}
 	})
 
 	proxyURL = getProxyURL(t, srv.Addr)
+	adminURL = getProxyURL(t, adminSrv.Addr)
 	waitUntilServing(t, proxyURL)
+	waitUntilServing(t, adminURL)
 
-	return proxyURL
+	return proxyURL, adminURL
 }
 
 func waitUntilServing(t *testing.T, baseURL string) {
 	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
 	client := &http.Client{Timeout: 50 * time.Millisecond}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		resp, err := client.Get(baseURL + "/")
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/", nil)
+		if err != nil {
+			t.Fatalf("NewRequest: %v", err)
+		}
+		resp, err := client.Do(req)
 		if err == nil {
 			resp.Body.Close()
 			return
 		}
-		time.Sleep(10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			t.Fatal("server did not become ready in time")
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
-	t.Fatal("server did not become ready in time")
 }
 
 func TestRoutingByHost(t *testing.T) {
@@ -106,7 +142,7 @@ func TestRoutingByHost(t *testing.T) {
 		t.Fatalf("AddRoute: %v", err)
 	}
 
-	proxyURL := startTestServer(t, Config{
+	proxyURL, _ := startTestServer(t, Config{
 		Port:    ephemeralPort(t),
 		Impl:    ReverseProxyImpl,
 		MaxHops: 2,
@@ -165,7 +201,7 @@ func Test502WhenBackendDown(t *testing.T) {
 	rt := newRouteTable(t)
 	rt.AddRoute("myapp.localhost", "http://localhost:3000", false)
 
-	proxyURL := startTestServer(t, Config{
+	proxyURL, _ := startTestServer(t, Config{
 		Port:    ephemeralPort(t),
 		Impl:    ReverseProxyImpl,
 		MaxHops: 2,
@@ -209,7 +245,7 @@ func TestRoutingWithHopLimit(t *testing.T) {
 
 	rt := newRouteTable(t)
 
-	proxyURL := startTestServer(t, Config{
+	proxyURL, _ := startTestServer(t, Config{
 		Port:    ephemeralPort(t),
 		Impl:    ReverseProxyImpl,
 		MaxHops: 2,
@@ -250,7 +286,7 @@ func TestUnknownHostReturns404(t *testing.T) {
 
 	rt := newRouteTable(t)
 
-	proxyURL := startTestServer(t, Config{
+	proxyURL, _ := startTestServer(t, Config{
 		Port: ephemeralPort(t),
 		Impl: ReverseProxyImpl,
 	}, rt)

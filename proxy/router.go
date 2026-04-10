@@ -217,7 +217,11 @@ func (rt *RouteTable) ListRoutes() []Route {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 
-	return slices.Collect(maps.Values(rt.routes))
+	out := slices.Collect(maps.Values(rt.routes))
+	if out == nil {
+		return []Route{}
+	}
+	return out
 }
 
 // routeProcessAlive reports whether this route's owning PID still exists.
