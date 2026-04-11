@@ -61,7 +61,7 @@ Provide a way to add and remove routes at runtime.
 
 ---
 
-## Phase 5: Child process spawning with PORT injection
+## Phase 5: Child process spawning with PORT injection — [Guide](docs/phase-5.md)
 
 Start a child command and wire it into the proxy.
 
@@ -108,7 +108,7 @@ Finish the MVP with observability and cleanup.
 | 1     | Basic CLI skeleton           | ✅ Complete     |
 | 2     | HTTP server & reverse proxy  | ✅ Complete     |
 | 3     | Host-based routing           | ✅ Complete     |
-| 4     | Route registration — [Guide](docs/phase-4.md) | ⬜ Not Started  |
-| 5     | Child process spawning       | ⬜ Not Started  |
+| 4     | Route registration — [Guide](docs/phase-4.md) | ✅ Complete     |
+| 5     | Child process spawning — [Guide](docs/phase-5.md) | ⬜ Not Started  |
 | 6     | Wiring it all together       | ⬜ Not Started  |
 | 7     | `list` command and polish    | ⬜ Not Started  |
