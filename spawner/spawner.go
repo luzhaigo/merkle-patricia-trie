@@ -54,8 +54,9 @@ func FindFreePort(min, max int) (port int, outErr error) {
 }
 
 type SpawnResult struct {
-	PID  int
-	Wait func() error
+	PID      int
+	Wait     func() error
+	ExitCode func() int
 }
 
 func SpawnCommand(ctx context.Context, args []string, extraEnv []string) (*SpawnResult, error) {
@@ -85,5 +86,12 @@ func SpawnCommand(ctx context.Context, args []string, extraEnv []string) (*Spawn
 		return waitErr
 	}
 
-	return &SpawnResult{PID: cmd.Process.Pid, Wait: wait}, nil
+	exitCode := func() int {
+		if cmd.ProcessState == nil {
+			return -1
+		}
+		return cmd.ProcessState.ExitCode()
+	}
+
+	return &SpawnResult{PID: cmd.Process.Pid, Wait: wait, ExitCode: exitCode}, nil
 }

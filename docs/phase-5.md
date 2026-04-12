@@ -203,12 +203,14 @@ Temporarily update `main.go` so that if arguments are given on the command line,
 
 This will be fully automated in Phase 6. For now, hard-code or pass arguments to validate the flow works end-to-end:
 
+**Note:** `python3 -m http.server` alone listens on port **8000** and does **not** read the `PORT` environment variable. Your smoke test must pass the chosen port into the child (e.g. as a CLI argument) or run under a shell that expands **`$PORT`**. That matches upstream portless, which runs the user command under **`/bin/sh -c`** (see [`spawnCommand`](https://github.com/vercel-labs/portless/blob/main/packages/portless/src/cli-utils.ts)) so shell semantics and env substitution apply.
+
 ```bash
 # terminal 1 — start proxy
 go run .
 
-# terminal 2 — spawn a local HTTP server through portless
-go run . myapp python3 -m http.server
+# terminal 2 — spawn a local HTTP server on the injected PORT (shell expands $PORT)
+go run . myapp sh -c 'exec python3 -m http.server "$PORT"'
 
 # curl through proxy:
 curl -H "Host: myapp.localhost" http://localhost:1355/
@@ -272,7 +274,7 @@ For output capture in tests, consider a variant of `SpawnCommand` that accepts `
 |-----------------------------|-------------------|
 | `net.createServer().listen(port)` to check availability | `net.Listen("tcp", ":port")` then close |
 | Random-then-sequential port search | Same algorithm |
-| `spawn("/bin/sh", ["-c", cmd], { stdio: "inherit" })` | `exec.Command(args[0], args[1:]...)` with `cmd.Stdout = os.Stdout` |
+| `spawn("/bin/sh", ["-c", cmd], { stdio: "inherit" })` — one shell string, so `$PORT` works in the script | `exec.Command(args[0], args[1:]...)` — argv list; use `sh -c '…'"$PORT"…'` when you need shell expansion (as in the smoke test) |
 | `process.on("SIGINT", () => child.kill("SIGINT"))` | `cmd.Cancel` + `cmd.WaitDelay` via context cancel |
 | `child.on("exit", (code) => process.exit(code))` | `result.Wait()` returns `*exec.ExitError` with `.ExitCode()` |
 | `options.onCleanup()` callback removes route | Caller calls `rt.RemoveRoute` after `Wait()` returns |
@@ -286,6 +288,6 @@ Show me your code and I'll check that:
 2. `go test ./...` passes.
 3. `FindFreePort` returns a usable port in the given range.
 4. `SpawnCommand` starts the child with the right env, streams output, and responds to context cancellation.
-5. A manual smoke test (`go run . myapp python3 -m http.server` or similar) routes traffic through the proxy.
+5. A manual smoke test (e.g. `go run . myapp sh -c 'exec python3 -m http.server "$PORT"'`) routes traffic through the proxy.
 
 Then we'll check off Phase 5 and move to Phase 6 (full CLI wiring).
