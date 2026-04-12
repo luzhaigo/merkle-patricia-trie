@@ -1,8 +1,13 @@
 package spawner
 
 import (
+	"context"
 	"net"
+	"os/exec"
+	"runtime"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestFindFreePort(t *testing.T) {
@@ -73,4 +78,105 @@ func TestFindFreePort(t *testing.T) {
 			t.Fatalf("expected error when the only candidate port is already bound, got nil")
 		}
 	})
+}
+
+func TestSpawnCommand(t *testing.T) {
+	t.Parallel()
+	t.Run("no arguments provided", func(t *testing.T) {
+		t.Parallel()
+		_, err := SpawnCommand(context.Background(), []string{}, []string{})
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+	})
+
+	t.Run("spawn command and wait for it to exit", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("true is not available on Windows")
+		}
+		t.Parallel()
+		exePath, err := exec.LookPath("true")
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		result, err := SpawnCommand(context.Background(), []string{exePath}, []string{})
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		err = result.Wait()
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+	})
+
+	t.Run("concurrent Wait is safe", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("true is not available on Windows")
+		}
+		t.Parallel()
+		exePath, err := exec.LookPath("true")
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		result, err := SpawnCommand(context.Background(), []string{exePath}, []string{})
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		var wg sync.WaitGroup
+		var err0, err1 error
+		wg.Add(2)
+		go func() {
+			err0 = result.Wait()
+			wg.Done()
+		}()
+		go func() {
+			err1 = result.Wait()
+			wg.Done()
+		}()
+
+		wg.Wait()
+
+		if err0 != nil {
+			t.Fatalf("expected no error from first Wait, got %v", err0)
+		}
+		if err1 != nil {
+			t.Fatalf("expected no error from second Wait, got %v", err1)
+		}
+
+		// Both Wait calls must return the same error value from the shared once.Do
+		// closure (including both nil on success).
+		if err0 != err1 {
+			t.Fatalf("expected errors to be identical, got %v and %v", err0, err1)
+		}
+	})
+
+	t.Run("context cancel ends long sleep", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("exec cancellation signals differ on Windows")
+		}
+		t.Parallel()
+		sleepPath, err := exec.LookPath("sleep")
+		if err != nil {
+			t.Skip("sleep not in PATH:", err)
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		result, err := SpawnCommand(ctx, []string{sleepPath, "60"}, nil)
+		if err != nil {
+			t.Fatalf("SpawnCommand: %v", err)
+		}
+		cancel()
+
+		waitDone := make(chan error, 1)
+		go func() { waitDone <- result.Wait() }()
+
+		select {
+		case <-waitDone:
+			// Exit status and wrapping depend on OS/Go (SIGTERM, context, etc.).
+			// The contract we assert is: Wait returns without waiting full sleep.
+		case <-time.After(5 * time.Second):
+			t.Fatal("Wait did not return within 5s after context cancel (sleep would take 60s)")
+		}
+	})
+
 }
