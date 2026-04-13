@@ -102,7 +102,7 @@ func main() {
 		signalCtx, signalCancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer signalCancel()
 
-		result, err := spawner.SpawnCommand(signalCtx, os.Args[2:], []string{fmt.Sprintf("PORT=%d", port)})
+		result, err := spawner.SpawnCommand(signalCtx, os.Args[2:], []string{fmt.Sprintf("PORT=%d", port)}, os.Stdout, os.Stderr)
 		if err != nil {
 			log.Fatalf("Failed to spawn command: %v", err)
 		}

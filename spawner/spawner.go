@@ -3,6 +3,7 @@ package spawner
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net"
 	"os"
@@ -59,15 +60,15 @@ type SpawnResult struct {
 	ExitCode func() int
 }
 
-func SpawnCommand(ctx context.Context, args []string, extraEnv []string) (*SpawnResult, error) {
+func SpawnCommand(ctx context.Context, args []string, extraEnv []string, stdout, stderr io.Writer) (*SpawnResult, error) {
 	if len(args) == 0 {
 		return nil, fmt.Errorf("no arguments provided")
 	}
 
 	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	cmd.Env = append(os.Environ(), extraEnv...)
 	cmd.Cancel = func() error {
 		return cmd.Process.Signal(syscall.SIGTERM)
