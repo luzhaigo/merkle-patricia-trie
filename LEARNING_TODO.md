@@ -75,7 +75,7 @@ Start a child command and wire it into the proxy.
 
 ---
 
-## Phase 6: Wiring it all together
+## Phase 6: Wiring it all together — [Guide](docs/phase-6.md)
 
 Connect the CLI, proxy, route table, and process spawner into a working tool.
 
@@ -109,6 +109,6 @@ Finish the MVP with observability and cleanup.
 | 2     | HTTP server & reverse proxy  | ✅ Complete     |
 | 3     | Host-based routing           | ✅ Complete     |
 | 4     | Route registration — [Guide](docs/phase-4.md) | ✅ Complete     |
-| 5     | Child process spawning — [Guide](docs/phase-5.md) | ⬜ Not Started  |
-| 6     | Wiring it all together       | ⬜ Not Started  |
+| 5     | Child process spawning — [Guide](docs/phase-5.md) | ✅ Complete     |
+| 6     | Wiring it all together — [Guide](docs/phase-6.md) | ⬜ Not Started  |
 | 7     | `list` command and polish    | ⬜ Not Started  |
