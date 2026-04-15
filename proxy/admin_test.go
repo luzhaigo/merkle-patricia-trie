@@ -240,7 +240,7 @@ func TestProxyReflectsAdminChanges(t *testing.T) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("Expected status %d, got %d", http.StatusOK, resp.StatusCode)
+		t.Fatalf("Expected status %d, got %d", http.StatusCreated, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)

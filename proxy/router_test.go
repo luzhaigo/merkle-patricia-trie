@@ -67,7 +67,9 @@ func TestRemoveRoute(t *testing.T) {
 	t.Parallel()
 
 	rt, _ := newTestRouteTable(t)
-	rt.AddRoute("myapp.localhost", "http://localhost:3000", false)
+	if err := rt.AddRoute("myapp.localhost", "http://localhost:3000", false); err != nil {
+		t.Fatalf("AddRoute: %v", err)
+	}
 	rt.RemoveRoute("myapp.localhost")
 
 	route, ok := rt.Lookup("myapp.localhost")

@@ -15,6 +15,12 @@ portless-go myapp npm start
 
 By the end of this phase, `portless-go` works like upstream `portless`: a proxy daemon running in one terminal (or auto-started) and any number of app commands spawned from other terminals, each registering and cleaning up its own route.
 
+## Layout in this repo (already in place)
+
+- **`cli/`** — CLI parsing and helpers (`cli.go`, `cli_test.go`). This package moved out of `src/` so `src/` is only shared metadata (e.g. `version.go` for `Name` / `Version`, still imported by `proxy/server.go` and `cli`).
+- **`proxy/client.go`** — HTTP admin client for `RegisterRoute` / `DeregisterRoute` (Task 6.1). Returns `nil` on `201` / `204`, includes JSON `{"error":"..."}` text in errors when present, and path-escapes the hostname on `DELETE`.
+- **`main.go`** — Today still uses a simple `len(os.Args)` split (proxy vs spawn smoke path); Task 6.2 replaces that with full dispatch wired to `cli` + `runApp`.
+
 ## How upstream portless does it
 
 Read [`packages/portless/src/cli.ts`](https://github.com/vercel-labs/portless/blob/main/packages/portless/src/cli.ts) — three key pieces:
@@ -60,7 +66,7 @@ portless-go help / version           → info
 
 ### A `runApp` function (orchestration core)
 
-Located in `main.go` or a new `cmd/` file:
+Usually lives in **`main.go`** (or a small extra file in package `main`, e.g. `run.go`), calling into **`proxy`**, **`spawner`**, and **`cli`**:
 
 ```go
 func runApp(name string, cmdArgs []string) error
@@ -77,7 +83,7 @@ Steps:
 
 ### Admin API client helper
 
-A small function (in `proxy/` or a new `client/` package) to talk to the admin API:
+Implemented in **`proxy/client.go`** (same module as `AdminHandler`, so it can reuse `addRouteRequest` / `jsonErrorResponse` types):
 
 ```go
 func RegisterRoute(adminAddr, hostname, backend string) error
@@ -92,7 +98,7 @@ This keeps `runApp` clean and testable.
 - **`net/http` as a client** — `http.Post`, `http.NewRequest` + `http.DefaultClient.Do`
 - **`path.Base` / `os.Getwd`** — infer project name from directory
 - **`os.Exit` with child exit code** — propagate `result.ExitCode()` to the shell
-- **Integration between packages** — `proxy`, `spawner`, `src` (CLI) working together
+- **Integration between packages** — `proxy`, `spawner`, `cli` (and `src` only for shared constants like version / app name)
 
 ## Tasks
 
@@ -102,7 +108,7 @@ This keeps `runApp` clean and testable.
 
 **What to do:**
 
-Create `proxy/client.go` with helper functions:
+Add **`proxy/client.go`** with helper functions (already present in the tree; extend or harden as needed):
 
 ```go
 package proxy
@@ -142,7 +148,7 @@ resp, err := http.DefaultClient.Do(req)
 
 **What to do:**
 
-Replace the current `if len(os.Args) <= 1 { … } else { … }` with proper subcommand dispatch. You can reuse and adapt the CLI parsing from `src/cli.go` (Phase 1).
+Replace the current `if len(os.Args) <= 1 { … } else { … }` with proper subcommand dispatch. Reuse and adapt the parsing in **`cli/cli.go`** (Phase 1); call **`cli.Cli()`** from `main` or merge that logic into `main` and delete the duplicate branch.
 
 ```go
 func main() {
@@ -180,7 +186,7 @@ func main() {
 
 **`listRoutes()`** — `GET http://localhost:<adminPort>/routes`, pretty-print the JSON.
 
-**`printUsage()` / `printVersion()`** — reuse or adapt from `src/cli.go`.
+**`printUsage()` / `printVersion()`** — reuse or adapt from **`cli/cli.go`** (see `src` import there for `Name` / `Version`).
 
 **Hints:**
 - For `run` mode name inference:
@@ -241,7 +247,7 @@ func runApp(name string, cmdArgs []string) {
     defer stop()
 
     result, err := spawner.SpawnCommand(ctx, cmdArgs,
-        []string{fmt.Sprintf("PORT=%d", port)}, os.Stdout, os.Stderr)
+        []string{fmt.Sprintf("PORT=%d", port)}, os.Stdout, os.Stderr) // io.Writer stdout/stderr
     if err != nil { log.Fatalf("spawn: %v", err) }
 
     log.Printf("Started PID %d", result.PID)
@@ -339,8 +345,8 @@ Add tests that verify the wiring without requiring a live proxy. Focus on:
 - `TestRegisterRouteConnectionRefused` — call with a bad address, verify a clear error.
 
 **CLI dispatch tests** (optional, in `main_test.go` or via `go run` + subprocess):
-- Verify `parseRunArgs` returns correct name and command args.
-- Verify `inferName` returns the directory basename.
+- **`cli/cli_test.go`** already covers **`inferName`** and **`runCommandWithName`**; add **`parseRunArgs`** tests there (or export helpers from `cli` with `Test` build tags) once those functions exist.
+- Optionally verify `parseRunArgs` returns correct name and command args from `main` via a thin wrapper tested in `main_test.go`.
 
 **Hints:**
 
@@ -379,7 +385,7 @@ err := proxy.RegisterRoute(srv.Listener.Addr().String(), "test.localhost", "http
 |-----------------------------|-------------------|
 | `main()` → `handleRunMode` / `handleNamedMode` → `runApp` | `main()` → `switch` dispatch → `runApp` |
 | `store.addRoute(hostname, port, pid)` — direct file | `proxy.RegisterRoute(adminAddr, hostname, backend)` — HTTP to admin |
-| `spawnCommand(cmd, { env, onCleanup })` | `spawner.SpawnCommand(ctx, cmd, env, stdout, stderr)` + deregister |
+| `spawnCommand(cmd, { env, onCleanup })` | `spawner.SpawnCommand(ctx, cmdArgs, extraEnv, stdout, stderr)` + deregister |
 | `inferProjectName()` from package.json / directory | `filepath.Base(os.Getwd())` |
 | `discoverState()` to find running proxy | Check admin API reachability or assume default ports |
 | `process.exit(code)` | `os.Exit(result.ExitCode())` |

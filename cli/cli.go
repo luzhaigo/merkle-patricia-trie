@@ -1,9 +1,10 @@
-package src
+package cli
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"portless-go/src"
 	"strings"
 )
 
@@ -30,7 +31,7 @@ Usage:
 	portless-go run [--name <name>] <cmd>
 	portless-go list
 	portless-go help
-	portless-go version`, Name, Version)
+	portless-go version`, src.Name, src.Version)
 
 		if len(args) == 0 {
 			fmt.Fprintln(os.Stderr, usage)
@@ -44,7 +45,7 @@ Usage:
 	command := args[0]
 	switch command {
 	case "version":
-		fmt.Println(Name, Version)
+		fmt.Println(src.Name, src.Version)
 		os.Exit(0)
 	case "list":
 		cmdList()

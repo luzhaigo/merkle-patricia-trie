@@ -65,13 +65,12 @@ func startTestServer(t *testing.T, config Config, rt *RouteTable) (proxyURL, adm
 	}()
 
 	t.Cleanup(func() {
-		err := srv.Close()
-		if err != nil {
-			t.Fatalf("Close: %v", err)
+		// Use Errorf, not Fatalf: FailNow in cleanup can skip the second Close.
+		if err := srv.Close(); err != nil {
+			t.Errorf("proxy Close: %v", err)
 		}
-		err = adminSrv.Close()
-		if err != nil {
-			t.Fatalf("Close: %v", err)
+		if err := adminSrv.Close(); err != nil {
+			t.Errorf("admin Close: %v", err)
 		}
 	})
 
