@@ -1,121 +1,138 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"portless-go/src"
-	"strings"
 )
 
-func runCommandWithName(name string, cmdArgs []string) error {
-	if len(cmdArgs) == 0 {
-		return fmt.Errorf("missing command after %s", name)
-	}
-
-	fmt.Println("name:", name)
-	fmt.Println("cmd:", strings.Join(cmdArgs, " "))
-
-	return nil
-}
-
-func cmdList() {
-	fmt.Println("list")
-}
-
-func runNamedMode(args []string) {
-	if len(args) == 0 || args[0] == "help" {
-		usage := fmt.Sprintf(`%s %s
+func printUsage() {
+	fmt.Printf(`%s %s
 Usage:
 	portless-go <name> <cmd> [args...]
 	portless-go run [--name <name>] <cmd>
 	portless-go list
 	portless-go help
 	portless-go version`, src.Name, src.Version)
-
-		if len(args) == 0 {
-			fmt.Fprintln(os.Stderr, usage)
-			os.Exit(1)
-		} else {
-			fmt.Fprintln(os.Stdout, usage)
-			os.Exit(0)
-		}
-	}
-
-	command := args[0]
-	switch command {
-	case "version":
-		fmt.Println(src.Name, src.Version)
-		os.Exit(0)
-	case "list":
-		cmdList()
-		os.Exit(0)
-	default:
-		if err := runCommandWithName(command, args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
-		os.Exit(0)
-	}
 }
 
+func printVersion() {
+	fmt.Printf(`%s %s`, src.Name, src.Version)
+}
+
+// ParseOptions wires behavior for each dispatch path. Callers (e.g. main) set
+// the handlers they support; nil handlers produce errMissingCommand where required.
+type ParseOptions struct {
+	OnDefault func()
+	OnList    func()
+	OnRun     func(name string, cmdArgs []string) error
+}
+
+var errMissingCommand = errors.New("missing command")
+
+func runIfSet(cmd func()) error {
+	if cmd != nil {
+		cmd()
+		return nil
+	}
+	return errMissingCommand
+}
+
+func runOnRunIfSet(onRun func(string, []string) error, name string, cmdArgs []string) error {
+	if onRun == nil {
+		return errMissingCommand
+	}
+	return onRun(name, cmdArgs)
+}
+
+// inferName returns the last path segment (used for run-mode default app name).
 func inferName(dir string) string {
 	return filepath.Base(dir)
 }
 
-func runRunMode(args []string) {
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "missing command")
-		os.Exit(1)
+func parseRunArgs(args []string) (name string, cmdArgs []string, err error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", nil, fmt.Errorf("get working directory: %w", err)
 	}
 
-	var name string
-	if args[0] != "--name" {
-		dir, err := os.Getwd()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "failed to get current directory")
-			os.Exit(1)
-		}
+	name = inferName(dir)
 
-		name = inferName(dir)
-	} else {
-		if len(args) <= 2 {
-			if len(args) == 1 {
-				fmt.Fprintln(os.Stderr, "missing name value")
-				os.Exit(1)
-			}
-
-			fmt.Fprintln(os.Stderr, "missing command")
-			os.Exit(1)
-		}
-
+	if len(args) >= 2 && args[0] == "--name" {
 		name = args[1]
 		args = args[2:]
 	}
 
-	if err := runCommandWithName(name, args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-
-	os.Exit(0)
-
+	return name, args, nil
 }
 
-func Cli() {
-	args := os.Args[1:]
+// primaryCommand maps aliases to a single key for the handler map.
+func primaryCommand(arg0 string) string {
+	switch arg0 {
+	case "--help", "-h":
+		return "help"
+	case "--version", "-v":
+		return "version"
+	default:
+		return arg0
+	}
+}
 
+// topLevel maps normalized first-token commands to handlers. Each handler receives
+// the full argv slice (including the command name at args[0]).
+var topLevel = map[string]func(args []string, opts ParseOptions) error{
+	"help": func(args []string, opts ParseOptions) error {
+		_ = args
+		_ = opts
+		printUsage()
+		return nil
+	},
+	"version": func(args []string, opts ParseOptions) error {
+		_ = args
+		_ = opts
+		printVersion()
+		return nil
+	},
+	"list": func(args []string, opts ParseOptions) error {
+		_ = args
+		return runIfSet(opts.OnList)
+	},
+	"run": func(args []string, opts ParseOptions) error {
+		if len(args) < 2 {
+			return fmt.Errorf("run requires a command (e.g. portless-go run npm start)")
+		}
+		name, cmdArgs, err := parseRunArgs(args[1:])
+		if err != nil {
+			return err
+		}
+		if len(cmdArgs) == 0 {
+			return fmt.Errorf("missing command after run")
+		}
+		return runOnRunIfSet(opts.OnRun, name, cmdArgs)
+	},
+}
+
+// Parse reads os.Args[1:] and dispatches using opts.
+func Parse(opts ParseOptions) error {
+	return parseProgramArgs(os.Args[1:], opts)
+}
+
+// parseProgramArgs is Parse with an explicit argv slice (tests use this; Parse delegates here).
+func parseProgramArgs(args []string, opts ParseOptions) error {
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "missing command")
-		os.Exit(1)
+		return runIfSet(opts.OnDefault)
 	}
 
-	if args[0] == "run" {
-		runRunMode(args[1:])
-		return
+	key := primaryCommand(args[0])
+	if h, ok := topLevel[key]; ok {
+		return h(args, opts)
 	}
 
-	runNamedMode(args)
-
+	// Named mode: portless-go <name> <cmd> [args...]
+	if len(args) < 2 {
+		return fmt.Errorf("Usage: portless-go <name> <cmd> [args...]")
+	}
+	return runOnRunIfSet(opts.OnRun, args[0], args[1:])
 }
