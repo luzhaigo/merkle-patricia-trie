@@ -27,22 +27,27 @@ func printVersion() {
 type ParseOptions struct {
 	OnDefault func()
 	OnList    func()
-	OnRun     func(name string, cmdArgs []string) error
+	OnRun     func(name string, cmdArgs []string) (int, error)
 }
 
 var errMissingCommand = errors.New("missing command")
 
-func runIfSet(cmd func()) error {
+// ExitUsage is the exit code returned for command-line misuse (missing args,
+// unknown subcommand, missing handler, etc.). Follows the bash convention of
+// exit 2 for argument errors.
+const ExitUsage = 2
+
+func runIfSet(cmd func()) (int, error) {
 	if cmd != nil {
 		cmd()
-		return nil
+		return 0, nil
 	}
-	return errMissingCommand
+	return ExitUsage, errMissingCommand
 }
 
-func runOnRunIfSet(onRun func(string, []string) error, name string, cmdArgs []string) error {
+func runOnRunIfSet(onRun func(string, []string) (int, error), name string, cmdArgs []string) (int, error) {
 	if onRun == nil {
-		return errMissingCommand
+		return ExitUsage, errMissingCommand
 	}
 	return onRun(name, cmdArgs)
 }
@@ -82,45 +87,45 @@ func primaryCommand(arg0 string) string {
 
 // topLevel maps normalized first-token commands to handlers. Each handler receives
 // the full argv slice (including the command name at args[0]).
-var topLevel = map[string]func(args []string, opts ParseOptions) error{
-	"help": func(args []string, opts ParseOptions) error {
+var topLevel = map[string]func(args []string, opts ParseOptions) (int, error){
+	"help": func(args []string, opts ParseOptions) (int, error) {
 		_ = args
 		_ = opts
 		printUsage()
-		return nil
+		return 0, nil
 	},
-	"version": func(args []string, opts ParseOptions) error {
+	"version": func(args []string, opts ParseOptions) (int, error) {
 		_ = args
 		_ = opts
 		printVersion()
-		return nil
+		return 0, nil
 	},
-	"list": func(args []string, opts ParseOptions) error {
+	"list": func(args []string, opts ParseOptions) (int, error) {
 		_ = args
 		return runIfSet(opts.OnList)
 	},
-	"run": func(args []string, opts ParseOptions) error {
+	"run": func(args []string, opts ParseOptions) (int, error) {
 		if len(args) < 2 {
-			return fmt.Errorf("run requires a command (e.g. portless-go run npm start)")
+			return ExitUsage, fmt.Errorf("run requires a command (e.g. portless-go run npm start)")
 		}
 		name, cmdArgs, err := parseRunArgs(args[1:])
 		if err != nil {
-			return err
+			return 1, err
 		}
 		if len(cmdArgs) == 0 {
-			return fmt.Errorf("missing command after run")
+			return ExitUsage, fmt.Errorf("missing command after run")
 		}
 		return runOnRunIfSet(opts.OnRun, name, cmdArgs)
 	},
 }
 
 // Parse reads os.Args[1:] and dispatches using opts.
-func Parse(opts ParseOptions) error {
+func Parse(opts ParseOptions) (int, error) {
 	return parseProgramArgs(os.Args[1:], opts)
 }
 
 // parseProgramArgs is Parse with an explicit argv slice (tests use this; Parse delegates here).
-func parseProgramArgs(args []string, opts ParseOptions) error {
+func parseProgramArgs(args []string, opts ParseOptions) (int, error) {
 	if len(args) == 0 {
 		return runIfSet(opts.OnDefault)
 	}
@@ -132,7 +137,7 @@ func parseProgramArgs(args []string, opts ParseOptions) error {
 
 	// Named mode: portless-go <name> <cmd> [args...]
 	if len(args) < 2 {
-		return fmt.Errorf("Usage: portless-go <name> <cmd> [args...]")
+		return ExitUsage, fmt.Errorf("usage: portless-go <name> <cmd> [args...]")
 	}
 	return runOnRunIfSet(opts.OnRun, args[0], args[1:])
 }
