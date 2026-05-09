@@ -1,3 +1,5 @@
+// Package src holds shared metadata (name, version) used across the other
+// packages in this module.
 package src
 
 var Name = "portless-go"

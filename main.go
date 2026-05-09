@@ -1,3 +1,5 @@
+// Command portless-go is a local development reverse proxy that maps named
+// .localhost hosts to spawned child processes.
 package main
 
 import (

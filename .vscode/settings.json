@@ -1,4 +1,12 @@
 {
   "editor.defaultFormatter": "golang.go",
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "gopls": {
+    "ui.diagnostic.staticcheck": true,
+    "ui.diagnostic.analyses": {
+      "shadow": true,
+      "unusedwrite": true,
+      "useany": true
+    }
+  }
 }

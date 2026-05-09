@@ -1,3 +1,5 @@
+// Package proxy implements the host-based reverse proxy, the route table
+// backing it, and the admin HTTP API used to register and deregister routes.
 package proxy
 
 import (
@@ -30,10 +32,7 @@ func isBackendUnreachable(err error) bool {
 		return true
 	}
 	var opErr *net.OpError
-	if errors.As(err, &opErr) {
-		return true
-	}
-	return false
+	return errors.As(err, &opErr)
 }
 
 func reloadRoutesAndClearCache(rt *RouteTable) {

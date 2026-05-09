@@ -1,3 +1,5 @@
+// Package spawner runs child processes with injected environment variables
+// and forwards their stdio, exit code, and lifecycle to the caller.
 package spawner
 
 import (

@@ -1,3 +1,5 @@
+// Package cli parses program arguments and dispatches to handler callbacks
+// supplied by the caller (typically main).
 package cli
 
 import (
