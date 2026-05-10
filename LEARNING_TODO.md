@@ -89,7 +89,7 @@ Connect the CLI, proxy, route table, and process spawner into a working tool.
 
 ---
 
-## Phase 7: `list` command and polish
+## Phase 7: `list` command and polish — [Guide](docs/phase-7.md)
 
 Finish the MVP with observability and cleanup.
 
@@ -110,5 +110,5 @@ Finish the MVP with observability and cleanup.
 | 3     | Host-based routing           | ✅ Complete     |
 | 4     | Route registration — [Guide](docs/phase-4.md) | ✅ Complete     |
 | 5     | Child process spawning — [Guide](docs/phase-5.md) | ✅ Complete     |
-| 6     | Wiring it all together — [Guide](docs/phase-6.md) | ⬜ Not Started  |
-| 7     | `list` command and polish    | ⬜ Not Started  |
+| 6     | Wiring it all together — [Guide](docs/phase-6.md) | ✅ Complete     |
+| 7     | `list` command and polish — [Guide](docs/phase-7.md) | ⬜ Not Started  |
