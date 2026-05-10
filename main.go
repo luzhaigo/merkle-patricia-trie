@@ -93,9 +93,9 @@ func resolveProxyPort() int {
 	return proxy.DefaultPort
 }
 
-func resolveAdminAddr() string {
+func resolveAdminBaseURL() string {
 	adminPort := resolveAdminPortFromProxyPort(resolveProxyPort())
-	return fmt.Sprintf("localhost:%d", adminPort)
+	return fmt.Sprintf("http://localhost:%d", adminPort)
 }
 
 func runApp(name string, cmdArgs []string) (int, error) {
@@ -107,8 +107,8 @@ func runApp(name string, cmdArgs []string) (int, error) {
 	hostname := name + ".localhost"
 	backendURL := fmt.Sprintf("http://localhost:%d", port)
 	log.Printf("%s -> %s (PORT=%d)", hostname, backendURL, port)
-	adminAddr := resolveAdminAddr()
-	if err := proxy.RegisterRoute(adminAddr, hostname, backendURL); err != nil {
+	adminBaseURL := resolveAdminBaseURL()
+	if err := proxy.RegisterRoute(adminBaseURL, hostname, backendURL); err != nil {
 		return 0, fmt.Errorf("register route: %w", err)
 	}
 
@@ -122,7 +122,7 @@ func runApp(name string, cmdArgs []string) (int, error) {
 	log.Printf("Spawned command: %d", result.PID)
 
 	waitErr := result.Wait()
-	if err := proxy.DeregisterRoute(adminAddr, hostname); err != nil {
+	if err := proxy.DeregisterRoute(adminBaseURL, hostname); err != nil {
 		log.Printf("remove route: %v", err)
 	}
 	exitCode := result.ExitCode()

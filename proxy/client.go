@@ -9,13 +9,20 @@ import (
 	"net/url"
 )
 
-func RegisterRoute(adminAddr, hostname, backend string) error {
+// RegisterRoute POSTs a new route to the admin API at adminBaseURL
+// (e.g. "http://localhost:1356"). Returns nil on 201 Created.
+func RegisterRoute(adminBaseURL, hostname, backend string) error {
 	body, err := json.Marshal(addRouteRequest{Hostname: hostname, Backend: backend})
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequest("POST", "http://"+adminAddr+"/routes", bytes.NewReader(body))
+	endpoint, err := url.JoinPath(adminBaseURL, "routes")
+	if err != nil {
+		return fmt.Errorf("build register URL: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -31,8 +38,7 @@ func RegisterRoute(adminAddr, hostname, backend string) error {
 	}
 
 	b, _ := io.ReadAll(resp.Body)
-	msg := parseJSONErrorBody(b)
-	if msg != "" {
+	if msg := parseJSONErrorBody(b); msg != "" {
 		return fmt.Errorf("register route: %s: %s", resp.Status, msg)
 	}
 	return fmt.Errorf("register route: %s", resp.Status)
@@ -46,10 +52,15 @@ func parseJSONErrorBody(body []byte) string {
 	return ""
 }
 
-// DeregisterRoute removes a route by hostname via the admin API.
-func DeregisterRoute(adminAddr, hostname string) error {
-	u := "http://" + adminAddr + "/routes/" + url.PathEscape(hostname)
-	req, err := http.NewRequest("DELETE", u, nil)
+// DeregisterRoute removes a route by hostname via the admin API at
+// adminBaseURL (e.g. "http://localhost:1356"). Returns nil on 204 No Content.
+func DeregisterRoute(adminBaseURL, hostname string) error {
+	endpoint, err := url.JoinPath(adminBaseURL, "routes", url.PathEscape(hostname))
+	if err != nil {
+		return fmt.Errorf("build deregister URL: %w", err)
+	}
+
+	req, err := http.NewRequest("DELETE", endpoint, nil)
 	if err != nil {
 		return err
 	}
