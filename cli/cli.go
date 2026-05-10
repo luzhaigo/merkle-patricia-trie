@@ -27,8 +27,8 @@ func printVersion() {
 // ParseOptions wires behavior for each dispatch path. Callers (e.g. main) set
 // the handlers they support; nil handlers produce errMissingCommand where required.
 type ParseOptions struct {
-	OnDefault func()
-	OnList    func()
+	OnDefault func() error
+	OnList    func() error
 	OnRun     func(name string, cmdArgs []string) (int, error)
 }
 
@@ -39,12 +39,14 @@ var errMissingCommand = errors.New("missing command")
 // exit 2 for argument errors.
 const ExitUsage = 2
 
-func runIfSet(cmd func()) (int, error) {
-	if cmd != nil {
-		cmd()
-		return 0, nil
+func runIfSet(cmd func() error) (int, error) {
+	if cmd == nil {
+		return ExitUsage, errMissingCommand
 	}
-	return ExitUsage, errMissingCommand
+	if err := cmd(); err != nil {
+		return 1, err
+	}
+	return 0, nil
 }
 
 func runOnRunIfSet(onRun func(string, []string) (int, error), name string, cmdArgs []string) (int, error) {

@@ -32,7 +32,7 @@ func RegisterRoute(adminBaseURL, hostname, backend string) error {
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return errors.Join(ErrProxyUnreachable, err)
 	}
 	defer resp.Body.Close()
 
@@ -69,7 +69,7 @@ func DeregisterRoute(adminBaseURL, hostname string) error {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return errors.Join(ErrProxyUnreachable, err)
 	}
 	defer resp.Body.Close()
 

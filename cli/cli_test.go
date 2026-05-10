@@ -38,7 +38,10 @@ func TestParseProgramArgs_empty(t *testing.T) {
 	t.Run("OnDefault runs", func(t *testing.T) {
 		var ran bool
 		code, err := parseProgramArgs(nil, ParseOptions{
-			OnDefault: func() { ran = true },
+			OnDefault: func() error {
+				ran = true
+				return nil
+			},
 		})
 		if err != nil {
 			t.Fatalf("err = %v, want nil", err)
@@ -86,7 +89,10 @@ func TestParseProgramArgs_list(t *testing.T) {
 	t.Run("OnList runs", func(t *testing.T) {
 		var ran bool
 		code, err := parseProgramArgs([]string{"list"}, ParseOptions{
-			OnList: func() { ran = true },
+			OnList: func() error {
+				ran = true
+				return nil
+			},
 		})
 		if err != nil {
 			t.Fatalf("err = %v", err)

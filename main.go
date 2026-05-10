@@ -16,6 +16,7 @@ import (
 	"portless-go/spawner"
 	"strconv"
 	"syscall"
+	"text/tabwriter"
 	"time"
 )
 
@@ -28,7 +29,7 @@ func resolveAdminPortFromProxyPort(port int) int {
 	return adminPort
 }
 
-func startProxy() {
+func startProxy() error {
 	log.Println("start proxy")
 
 	port := resolveProxyPort()
@@ -84,6 +85,8 @@ func startProxy() {
 		log.Fatalf("Failed to shutdown server: %v", err)
 	}
 	log.Println("servers shut down")
+
+	return nil
 }
 
 func resolveProxyPort() int {
@@ -137,16 +140,47 @@ func runApp(name string, cmdArgs []string) (int, error) {
 	return exitCode, nil
 }
 
+func listRoutes() error {
+	routes, err := proxy.ListRoutes(resolveAdminBaseURL())
+	if err != nil {
+		return err
+	}
+
+	if len(routes) == 0 {
+		fmt.Println("no routes registered")
+		return nil
+	}
+
+	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
+	fmt.Fprintln(w, "HOSTNAME\tBACKEND\tPID\tSTATUS")
+	for _, r := range routes {
+		status := "alive"
+		if !proxy.IsProcessAlive(r.PID) {
+			status = "dead"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", r.Hostname, r.Backend, r.PID, status)
+	}
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("flush: %w", err)
+	}
+	return nil
+}
+
 func main() {
 	exitCode, err := cli.Parse(cli.ParseOptions{
 		OnDefault: startProxy,
-		OnList: func() {
-			log.Println("list (not wired to admin API yet)")
-		},
-		OnRun: runApp,
+		OnList:    listRoutes,
+		OnRun:     runApp,
 	})
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		if errors.Is(err, proxy.ErrProxyUnreachable) {
+			fmt.Fprintln(os.Stderr, "proxy not running. start it with: portless-go")
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		if exitCode == 0 {
+			exitCode = 1
+		}
 	}
 	os.Exit(exitCode)
 }

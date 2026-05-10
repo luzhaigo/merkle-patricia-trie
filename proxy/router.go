@@ -224,6 +224,13 @@ func (rt *RouteTable) ListRoutes() []Route {
 	return out
 }
 
+// IsProcessAlive reports whether the given PID still exists and can be signalled.
+// Exported for callers (e.g. the CLI's "list" command) that want to render
+// per-route status without re-implementing the kill(0) trick.
+func IsProcessAlive(pid int) bool {
+	return routeProcessAlive(pid)
+}
+
 // routeProcessAlive reports whether this route's owning PID still exists.
 // PID <= 0 means "no owner" (missing or zero pid in JSON) — we treat that like
 // a dead owner and drop the route on Load so legacy files cannot keep stale entries.
