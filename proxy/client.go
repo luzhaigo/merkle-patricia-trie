@@ -3,11 +3,14 @@ package proxy
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 )
+
+var ErrProxyUnreachable = errors.New("proxy unreachable")
 
 // RegisterRoute POSTs a new route to the admin API at adminBaseURL
 // (e.g. "http://localhost:1356"). Returns nil on 201 Created.
@@ -79,4 +82,36 @@ func DeregisterRoute(adminBaseURL, hostname string) error {
 		return fmt.Errorf("deregister route: %s: %s", resp.Status, msg)
 	}
 	return fmt.Errorf("deregister route: %s", resp.Status)
+}
+
+// ListRoutes fetches all registered routes from the admin API at adminBaseURL
+// (e.g. "http://localhost:1356"). Returns ErrProxyUnreachable wrapped with the
+// underlying transport error when the proxy isn't running, and a generic error
+// for non-200 responses.
+func ListRoutes(adminBaseURL string) ([]Route, error) {
+	endpoint, err := url.JoinPath(adminBaseURL, "routes")
+	if err != nil {
+		return nil, fmt.Errorf("build list URL: %w", err)
+	}
+
+	resp, err := http.Get(endpoint)
+	if err != nil {
+		return nil, errors.Join(ErrProxyUnreachable, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		msg := parseJSONErrorBody(b)
+		if msg != "" {
+			return nil, fmt.Errorf("list routes: %s: %s", resp.Status, msg)
+		}
+		return nil, fmt.Errorf("list routes: %s", resp.Status)
+	}
+
+	routes := []Route{}
+	if err := json.NewDecoder(resp.Body).Decode(&routes); err != nil {
+		return nil, fmt.Errorf("decode routes: %w", err)
+	}
+	return routes, nil
 }

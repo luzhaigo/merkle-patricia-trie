@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"errors"
 	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
@@ -90,4 +91,41 @@ func TestRegisterRouteConflict(t *testing.T) {
 	if !strings.Contains(err.Error(), "409") {
 		t.Errorf("err = %v, want it to mention 409", err)
 	}
+}
+
+func TestListRoutes(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		srv, rt := newTestAdminServer(t)
+
+		if err := rt.AddRoute("test.localhost", "http://localhost:3000", false); err != nil {
+			t.Fatalf("AddRoute: %v", err)
+		}
+
+		routes, err := ListRoutes(srv.URL)
+		if err != nil {
+			t.Fatalf("ListRoutes: %v", err)
+		}
+
+		if len(routes) != 1 {
+			t.Fatalf("len = %d, want 1", len(routes))
+		}
+
+		got := routes[0]
+		if got.Hostname != "test.localhost" || got.Backend != "http://localhost:3000" {
+			t.Errorf("route = %+v", got)
+		}
+	})
+
+	t.Run("proxy unreachable", func(t *testing.T) {
+		srv := httptest.NewServer(nil)
+		srv.Close()
+
+		_, err := ListRoutes(srv.URL)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, ErrProxyUnreachable) {
+			t.Fatalf("expected ErrProxyUnreachable, got %v", err)
+		}
+	})
 }
