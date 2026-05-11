@@ -154,11 +154,7 @@ func listRoutes() error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
 	fmt.Fprintln(w, "HOSTNAME\tBACKEND\tPID\tSTATUS")
 	for _, r := range routes {
-		status := "alive"
-		if !proxy.IsProcessAlive(r.PID) {
-			status = "dead"
-		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", r.Hostname, r.Backend, r.PID, status)
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\n", r.Hostname, r.Backend, r.PID, r.Status)
 	}
 	if err := w.Flush(); err != nil {
 		return fmt.Errorf("flush: %w", err)

@@ -7,6 +7,11 @@ import (
 	"net/http"
 )
 
+const (
+	StatusAlive = "alive"
+	StatusDead  = "dead"
+)
+
 type addRouteRequest struct {
 	Hostname string `json:"hostname"`
 	Backend  string `json:"backend"`
@@ -75,6 +80,12 @@ func AdminHandler(rt *RouteTable) *http.ServeMux {
 	sm.HandleFunc("GET /routes", func(w http.ResponseWriter, r *http.Request) {
 		routes := rt.ListRoutes()
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		for i := range routes {
+			routes[i].Status = StatusAlive
+			if !routeProcessAlive(routes[i].PID) {
+				routes[i].Status = StatusDead
+			}
+		}
 		json.NewEncoder(w).Encode(routes)
 	})
 

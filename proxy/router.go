@@ -17,6 +17,7 @@ type Route struct {
 	Hostname string `json:"hostname"`
 	Backend  string `json:"backend"`
 	PID      int    `json:"pid"`
+	Status   string `json:"status,omitempty"`
 }
 
 type RouteTable struct {
@@ -222,13 +223,6 @@ func (rt *RouteTable) ListRoutes() []Route {
 		return []Route{}
 	}
 	return out
-}
-
-// IsProcessAlive reports whether the given PID still exists and can be signalled.
-// Exported for callers (e.g. the CLI's "list" command) that want to render
-// per-route status without re-implementing the kill(0) trick.
-func IsProcessAlive(pid int) bool {
-	return routeProcessAlive(pid)
 }
 
 // routeProcessAlive reports whether this route's owning PID still exists.

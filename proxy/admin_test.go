@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -136,8 +137,8 @@ func TestListRoutesWithData(t *testing.T) {
 	}
 	pid := os.Getpid()
 	want := []Route{
-		{Hostname: "myapp.localhost", Backend: "http://localhost:3000", PID: pid},
-		{Hostname: "api.localhost", Backend: "http://localhost:4000", PID: pid},
+		{Hostname: "myapp.localhost", Backend: "http://localhost:3000", PID: pid, Status: StatusAlive},
+		{Hostname: "api.localhost", Backend: "http://localhost:4000", PID: pid, Status: StatusAlive},
 	}
 	slices.SortFunc(got, func(a, b Route) int { return cmp.Compare(a.Hostname, b.Hostname) })
 	slices.SortFunc(want, func(a, b Route) int { return cmp.Compare(a.Hostname, b.Hostname) })
@@ -149,7 +150,52 @@ func TestListRoutesWithData(t *testing.T) {
 			t.Fatalf("route %d: got %+v, want %+v (body %s)", i, got[i], want[i], body)
 		}
 	}
+}
 
+// TestListRoutesStatusDead injects a route owned by a PID that has already
+// exited (a short-lived sleep helper we kill and wait on) and verifies the
+// GET /routes handler reports it as dead.
+func TestListRoutesStatusDead(t *testing.T) {
+	t.Parallel()
+
+	sleeper := exec.Command("sleep", "30")
+	if err := sleeper.Start(); err != nil {
+		t.Skipf("could not start sleep helper: %v", err)
+	}
+	deadPID := sleeper.Process.Pid
+	if err := sleeper.Process.Kill(); err != nil {
+		t.Fatalf("kill helper: %v", err)
+	}
+	_ = sleeper.Wait()
+
+	rt, _ := newTestRouteTable(t)
+	rt.mu.Lock()
+	rt.routes["dead.localhost"] = Route{
+		Hostname: "dead.localhost",
+		Backend:  "http://localhost:5000",
+		PID:      deadPID,
+	}
+	rt.mu.Unlock()
+
+	h := AdminHandler(rt)
+	r := httptest.NewRequest("GET", "/routes", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var got []Route
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("len = %d, want 1: %s", len(got), w.Body.String())
+	}
+	if got[0].Status != StatusDead {
+		t.Errorf("Status = %q, want %q", got[0].Status, StatusDead)
+	}
 }
 
 func TestRemoveRouteViaAPI(t *testing.T) {
